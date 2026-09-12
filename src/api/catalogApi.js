@@ -1,5 +1,6 @@
 import axiosClient from './axiosClient';
 import { USE_MOCK_CATALOG } from '../config';
+import { toNumber, unwrapList } from './normalize';
 
 // El flag vive en src/config.js (se puede pisar con VITE_USE_MOCK_CATALOG en .env).
 // En true devolvemos datos falsos; en false pegamos contra catalog-service.
@@ -21,6 +22,19 @@ let nextId = 7;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Deja cada producto con la forma { id, name, price, unit } que usan las
+// pantallas, sin importar cómo lo serialice el backend.
+function normalizeProduct(product) {
+  return {
+    id: product.id,
+    name: product.name,
+    // price puede venir como el string '8900.00' (BigDecimal de Java).
+    price: toNumber(product.price),
+    // Si el backend no maneja unidades, asumimos kg (es una carnicería).
+    unit: product.unit ?? 'kg',
+  };
+}
+
 export async function getProducts() {
   if (USE_MOCK_CATALOG) {
     // Devolvemos una COPIA del array, no el original. Si devolviéramos siempre
@@ -30,7 +44,9 @@ export async function getProducts() {
   }
 
   const response = await axiosClient.get('/products');
-  return response.data;
+
+  // unwrapList: si Spring lo devuelve paginado ({ content: [...] }), saca el array.
+  return unwrapList(response.data).map(normalizeProduct);
 }
 
 // --- Funciones de administración ---
@@ -47,7 +63,7 @@ export async function createProduct(product) {
   }
 
   const response = await axiosClient.post('/products', product);
-  return response.data;
+  return normalizeProduct(response.data);
 }
 
 export async function updateProduct(id, updates) {
@@ -64,7 +80,7 @@ export async function updateProduct(id, updates) {
   }
 
   const response = await axiosClient.put(`/products/${id}`, updates);
-  return response.data;
+  return normalizeProduct(response.data);
 }
 
 export async function deleteProduct(id) {

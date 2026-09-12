@@ -22,6 +22,25 @@ const mockAdmin = {
 // Pequeña ayuda para simular la demora de una llamada real.
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// El backend puede devolver { user: {...}, token } o todo plano, y el token
+// puede llamarse accessToken o jwt. Acá dejamos siempre la forma que espera
+// AuthContext: { user: { id, name, email, role }, token }.
+function normalizeAuth(data) {
+  const rawUser = data.user ?? data;
+
+  return {
+    user: {
+      id: rawUser.id,
+      name: rawUser.name,
+      email: rawUser.email,
+      // Spring Security suele mandar ROLE_ADMIN o ADMIN; nosotros comparamos
+      // contra 'admin' en minúscula.
+      role: String(rawUser.role ?? 'cliente').toLowerCase().replace('role_', ''),
+    },
+    token: data.token ?? data.accessToken ?? data.jwt,
+  };
+}
+
 export async function login(email, password) {
   if (USE_MOCK_AUTH) {
     await delay(600);
@@ -36,7 +55,7 @@ export async function login(email, password) {
   }
 
   const response = await axiosClient.post('/auth/login', { email, password });
-  return response.data;
+  return normalizeAuth(response.data);
 }
 
 export async function register(name, email, password) {
@@ -56,7 +75,7 @@ export async function register(name, email, password) {
     email,
     password,
   });
-  return response.data;
+  return normalizeAuth(response.data);
 }
 
 export async function logout() {

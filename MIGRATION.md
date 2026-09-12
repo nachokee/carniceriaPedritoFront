@@ -140,6 +140,41 @@ if (error.response?.status === 401) {
 tiene expiración corta? Si expira en minutos vamos a necesitar refresh token,
 que hoy el front no maneja.
 
+### 2.4 Lo que ya está blindado
+
+`src/api/normalize.js` y los normalizadores de cada `api/` se anticipan a los
+desajustes de **forma** más probables. Corren **solo en la rama real** (con el
+flag en `true` no se ejecutan), así que no cambian nada del comportamiento
+mockeado de hoy.
+
+| Desajuste | Cómo queda resuelto |
+| --- | --- |
+| Respuesta paginada `{ content: [...] }` | `unwrapList()` acepta las dos formas y siempre devuelve un array |
+| `price`/`total` como string `"8900.00"` | `toNumber()` los convierte antes de que lleguen a las sumas |
+| La PK se llama `id` y no `orderId` | `normalizeOrder()` hace `orderId: order.orderId ?? order.id` |
+| `createdAt` en vez de `date` | `normalizeOrder()` acepta los dos |
+| Estados `LISTO_PARA_RETIRAR` / `PENDIENTE` | `normalizeStatus()` los pasa a `listo para retirar`; `getStatusColor()` además compara sin distinguir mayúsculas |
+| Estados al **escribir** (PATCH) | `toWireStatus()` manda `LISTO_PARA_RETIRAR`, el formato habitual de un enum de Java |
+| Token como `accessToken` o `jwt` | `normalizeAuth()` prueba `token ?? accessToken ?? jwt` |
+| Usuario plano, sin anidar en `user` | `normalizeAuth()` hace `data.user ?? data` |
+| Rol `ROLE_ADMIN` / `ADMIN` | `normalizeAuth()` lo baja a minúscula y le saca el prefijo `role_` |
+| Pago con `status: "APPROVED"` o `"aprobado"` | `normalizePayment()` normaliza y traduce con una tabla de alias |
+| Factura con `customerName`/`customerEmail` planos | `normalizeInvoice()` los vuelve a anidar en `customer` |
+| Items de factura sin `subtotal` | `normalizeInvoice()` lo calcula (`price * quantity`) |
+| Falta el campo `unit` | Cae en `'kg'` por defecto |
+
+**Lo que NO se puede blindar de antemano**, porque depende del contrato real:
+
+- **Los paths y el gateway** (`/products` vs `/api/v1/productos`). Si no
+  coinciden, es cambiar la URL en el `api/` que corresponda.
+- **Campos con otro nombre de negocio** (`nombre`, `precio`, `cantidad`). Se
+  agregan como alias en el normalizador correspondiente: una línea por campo.
+- **Si el rechazo de pago viene como HTTP 400** en vez de 200 con
+  `status: "rejected"`. Hoy eso cae en el `catch` y se ve el mensaje del backend;
+  funciona, pero el texto es menos claro.
+- **Si el backend espera los estados en otro formato al escribir**. Se cambia
+  `toWireStatus()` en `src/api/normalize.js`, un solo lugar.
+
 ---
 
 ## 3. auth-service
@@ -165,11 +200,13 @@ Respuesta esperada en login y register (`response.data`):
 
 ### Riesgos de desajuste
 
+> Los marcados con ✅ ya están cubiertos por la capa de normalización (sección 2.4).
+
 | Riesgo | Dónde explota |
 | --- | --- |
-| El token viene como `accessToken` o `jwt` y no como `token` | `AuthContext` guarda `undefined` → `isAuthenticated` queda en `false` y nunca entrás |
-| El rol viene `"ADMIN"` o `"ROLE_ADMIN"` en vez de `"cliente"` / `"admin"` | `AuthContext.jsx`: `isAdmin: auth.user?.role === 'admin'` compara **exacto y en minúscula**. Un admin entraría como cliente |
-| La respuesta viene plana (`{ id, name, email, role, token }`, sin `user` anidado) | `data.user` queda `undefined` → el navbar rompe al leer `user.name` |
+| ✅ El token viene como `accessToken` o `jwt` y no como `token` | `AuthContext` guarda `undefined` → `isAuthenticated` queda en `false` y nunca entrás |
+| ✅ El rol viene `"ADMIN"` o `"ROLE_ADMIN"` en vez de `"cliente"` / `"admin"` | `AuthContext.jsx`: `isAdmin: auth.user?.role === 'admin'` compara **exacto y en minúscula**. Un admin entraría como cliente |
+| ✅ La respuesta viene plana (`{ id, name, email, role, token }`, sin `user` anidado) | `data.user` queda `undefined` → el navbar rompe al leer `user.name` |
 | El `id` es un UUID string y no un número | No rompe nada hoy, pero `getOrdersByUser` filtra por `userId`: que el back compare el mismo tipo |
 
 Si el back no puede cambiar, **se adapta en `authApi.js`** y ninguna pantalla se
@@ -223,12 +260,14 @@ return {
 
 ### Riesgos de desajuste
 
+> Los marcados con ✅ ya están cubiertos por la capa de normalización (sección 2.4).
+
 | Riesgo | Dónde explota |
 | --- | --- |
-| **Paginación de Spring**: la respuesta viene `{ "content": [...], "totalElements": 6 }` | `products.map(...)` rompe: no es un array. **El riesgo más probable de todos** |
+| ✅ **Paginación de Spring**: la respuesta viene `{ "content": [...], "totalElements": 6 }` | `products.map(...)` rompe: no es un array. **El riesgo más probable de todos** |
 | El back usa nombres en castellano (`nombre`, `precio`) | La tarjeta se ve vacía y con `$undefined` |
-| No existe el campo `unit` | `ProductList` y la factura imprimen "8900 / undefined" |
-| `price` viene como string `"8900.00"` (BigDecimal serializado) | Los totales se rompen: `"8900.00" * 2` funciona, pero las sumas concatenan texto |
+| ✅ No existe el campo `unit` | `ProductList` y la factura imprimen "8900 / undefined" |
+| ✅ `price` viene como string `"8900.00"` (BigDecimal serializado) | Los totales se rompen: `"8900.00" * 2` funciona, pero las sumas concatenan texto |
 | `DELETE` devuelve 200 con body en vez de 204 | No rompe: `deleteProduct` ignora la respuesta |
 
 Adaptador para la paginación, en `catalogApi.js`:
@@ -283,13 +322,15 @@ Respuesta de un pedido:
 
 ### Riesgos de desajuste
 
+> Los marcados con ✅ ya están cubiertos por la capa de normalización (sección 2.4).
+
 | Riesgo | Dónde explota |
 | --- | --- |
-| El back devuelve `id` y no `orderId` | `CheckoutPage` hace `order.orderId` → la URL queda `/invoice/undefined`. **Casi seguro que pasa**: en Spring/JPA la PK se llama `id` |
-| El back devuelve `createdAt` y no `date` | Historial y panel admin muestran "Invalid Date" |
-| Los estados son enums en MAYÚSCULA (`PENDIENTE`, `PENDING`) | `src/orderStatus.js` mapea colores por texto exacto en minúscula → todos los Badge salen grises y el `Select` del admin no matchea ningún valor |
+| ✅ El back devuelve `id` y no `orderId` | `CheckoutPage` hace `order.orderId` → la URL queda `/invoice/undefined`. **Casi seguro que pasa**: en Spring/JPA la PK se llama `id` |
+| ✅ El back devuelve `createdAt` y no `date` | Historial y panel admin muestran "Invalid Date" |
+| ✅ Los estados son enums en MAYÚSCULA (`PENDIENTE`, `PENDING`) | `src/orderStatus.js` mapea colores por texto exacto en minúscula → todos los Badge salen grises y el `Select` del admin no matchea ningún valor |
 | `getAllOrders` no trae `customerName` (solo `userId`) | La columna "Cliente" del panel admin sale vacía |
-| Paginación, igual que catalog | `.sort()` rompe sobre un objeto |
+| ✅ Paginación, igual que catalog | `.sort()` rompe sobre un objeto |
 
 ### Dos cosas para acordar con Persona 1
 
@@ -352,9 +393,11 @@ Respuesta:
 
 ### Riesgos de desajuste
 
+> Los marcados con ✅ ya están cubiertos por la capa de normalización (sección 2.4).
+
 | Riesgo | Dónde explota |
 | --- | --- |
-| `status` viene `"APPROVED"` o `"aprobado"` | `CheckoutPage` compara `payment.status !== 'approved'` **exacto** → un pago exitoso se muestra como rechazado |
+| ✅ `status` viene `"APPROVED"` o `"aprobado"` | `CheckoutPage` compara `payment.status !== 'approved'` **exacto** → un pago exitoso se muestra como rechazado |
 | El rechazo viene como HTTP 400 y no como 200 con `status: "rejected"` | Cae en el `catch` y se ve el mensaje genérico en vez del motivo real |
 | No devuelve `message` en el rechazo | Se muestra el texto por defecto ("El pago fue rechazado…"), aceptable |
 
@@ -409,12 +452,14 @@ Ojo: los items de la factura tienen **`subtotal` ya calculado** y **no** tienen
 
 ### Riesgos de desajuste
 
+> Los marcados con ✅ ya están cubiertos por la capa de normalización (sección 2.4).
+
 | Riesgo | Dónde explota |
 | --- | --- |
 | La factura se genera on-demand con `POST /invoices` y no con `GET` | Hay que cambiar el método en `invoiceApi.js` (una línea) |
 | `GET` devuelve 404 si la factura todavía no existe | La pantalla muestra el Alert de error. Conviene que el back la cree al pagar |
-| Los items no traen `subtotal` | La columna queda vacía; se calcula en el adaptador: `price * quantity` |
-| `customer` viene plano (`customerName`, `customerEmail`) | `invoice.customer.name` rompe la pantalla |
+| ✅ Los items no traen `subtotal` | La columna queda vacía; se calcula en el adaptador: `price * quantity` |
+| ✅ `customer` viene plano (`customerName`, `customerEmail`) | `invoice.customer.name` rompe la pantalla |
 
 ### Bonus: acá se limpia un parche
 

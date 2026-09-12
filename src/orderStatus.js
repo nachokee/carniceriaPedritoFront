@@ -18,4 +18,7 @@ export const STATUS_COLORS = {
   cancelado: 'red',
 };
 
-export const getStatusColor = (status) => STATUS_COLORS[status] ?? 'gray';
+// Case-insensitive a propósito: si el backend manda PENDIENTE o
+// LISTO_PARA_RETIRAR, igual encuentra el color.
+export const getStatusColor = (status) =>
+  STATUS_COLORS[String(status ?? '').toLowerCase().replace(/_/g, ' ')] ?? 'gray';

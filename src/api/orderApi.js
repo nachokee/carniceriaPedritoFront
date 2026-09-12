@@ -1,5 +1,6 @@
 import axiosClient from './axiosClient';
 import { USE_MOCK_ORDERS } from '../config';
+import { normalizeStatus, toNumber, toWireStatus, unwrapList } from './normalize';
 
 // El flag vive en src/config.js (se puede pisar con VITE_USE_MOCK_ORDERS en .env).
 // En true devolvemos datos falsos; en false pegamos contra order-service.
@@ -57,6 +58,33 @@ let mockOrders = [
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Deja cada item con la forma que usan el carrito y las tablas.
+function normalizeOrderItem(item) {
+  return {
+    productId: item.productId ?? item.id,
+    name: item.name ?? item.productName,
+    price: toNumber(item.price),
+    unit: item.unit ?? 'kg',
+    quantity: toNumber(item.quantity),
+  };
+}
+
+// Traduce un pedido del backend a la forma que esperan las pantallas.
+// Los dos alias importantes:
+//   id        -> orderId   (en JPA la clave primaria se llama id)
+//   createdAt -> date
+function normalizeOrder(order) {
+  return {
+    orderId: order.orderId ?? order.id,
+    userId: order.userId,
+    customerName: order.customerName ?? order.customer?.name ?? '',
+    date: order.date ?? order.createdAt,
+    total: toNumber(order.total),
+    status: normalizeStatus(order.status),
+    items: (order.items ?? []).map(normalizeOrderItem),
+  };
+}
+
 export async function submitOrder(items, userId) {
   if (USE_MOCK_ORDERS) {
     // Esperamos 800ms para simular la demora de una llamada real y poder ver
@@ -68,8 +96,18 @@ export async function submitOrder(items, userId) {
     return { orderId: 'mock-123', status: 'pendiente', userId, items, total };
   }
 
-  const response = await axiosClient.post('/orders', { items, userId });
-  return response.data;
+  // Mandamos solo productId y quantity a propósito: el precio lo tiene que
+  // poner el backend desde su propia base. Si lo mandáramos nosotros, cualquiera
+  // podría editarlo desde DevTools y comprar a $1.
+  const response = await axiosClient.post('/orders', {
+    userId,
+    items: items.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+    })),
+  });
+
+  return normalizeOrder(response.data);
 }
 
 export async function getOrdersByUser(userId) {
@@ -81,7 +119,7 @@ export async function getOrdersByUser(userId) {
   }
 
   const response = await axiosClient.get(`/orders?userId=${userId}`);
-  return response.data;
+  return unwrapList(response.data).map(normalizeOrder);
 }
 
 // --- Funciones de administración ---
@@ -95,7 +133,7 @@ export async function getAllOrders() {
   }
 
   const response = await axiosClient.get('/orders');
-  return response.data;
+  return unwrapList(response.data).map(normalizeOrder);
 }
 
 export async function updateOrderStatus(orderId, status) {
@@ -109,6 +147,12 @@ export async function updateOrderStatus(orderId, status) {
     return mockOrders.find((order) => order.orderId === orderId);
   }
 
-  const response = await axiosClient.patch(`/orders/${orderId}`, { status });
-  return response.data;
+  const response = await axiosClient.patch(`/orders/${orderId}`, {
+    // toWireStatus: 'listo para retirar' -> 'LISTO_PARA_RETIRAR', que es como
+    // se escriben los enums en Java. Si el backend los usa de otra forma,
+    // se cambia en src/api/normalize.js y nada más.
+    status: toWireStatus(status),
+  });
+
+  return normalizeOrder(response.data);
 }
