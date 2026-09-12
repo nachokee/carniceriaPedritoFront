@@ -4,6 +4,16 @@ import { createContext, useContext, useState } from 'react';
 // sin tener que ir pasando props de padre a hijo en cada nivel.
 const OrderContext = createContext(null);
 
+// Recorta una cantidad al stock disponible.
+// Si stock es undefined (el backend no controla stock), no toca nada.
+function clampToStock(quantity, stock) {
+  if (typeof stock !== 'number') {
+    return quantity;
+  }
+
+  return Math.min(quantity, stock);
+}
+
 export function OrderProvider({ children }) {
   // El pedido es una lista de items: { productId, name, price, unit, quantity }
   const [items, setItems] = useState([]);
@@ -15,13 +25,23 @@ export function OrderProvider({ children }) {
     setItems((current) => {
       const existing = current.find((item) => item.productId === product.id);
 
-      // Si el producto ya está en el pedido, solo le sumamos 1 a la cantidad.
+      // Si el producto ya está en el pedido, solo le sumamos 1 a la cantidad
+      // (sin pasarnos del stock).
       if (existing) {
         return current.map((item) =>
           item.productId === product.id
-            ? { ...item, quantity: item.quantity + 1 }
+            ? {
+                ...item,
+                quantity: clampToStock(item.quantity + 1, product.stock),
+              }
             : item,
         );
+      }
+
+      // Sin stock no se agrega nada. La pantalla ya deshabilita el botón, esto
+      // es una segunda barrera por las dudas.
+      if (product.stock === 0) {
+        return current;
       }
 
       // Si no está, lo agregamos al final con cantidad 1.
@@ -32,6 +52,10 @@ export function OrderProvider({ children }) {
           name: product.name,
           price: product.price,
           unit: product.unit,
+          // Guardamos una foto del stock al momento de agregarlo, para poder
+          // topear la cantidad en el carrito sin volver a pedir el producto.
+          // El control que vale es el del backend al confirmar el pedido.
+          stock: product.stock,
           quantity: 1,
         },
       ];
@@ -51,7 +75,9 @@ export function OrderProvider({ children }) {
 
     setItems((current) =>
       current.map((item) =>
-        item.productId === productId ? { ...item, quantity } : item,
+        item.productId === productId
+          ? { ...item, quantity: clampToStock(quantity, item.stock) }
+          : item,
       ),
     );
   }

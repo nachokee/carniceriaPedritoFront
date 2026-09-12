@@ -1,4 +1,5 @@
 import { Button, Card, Container, Group, Stack, Text, Title } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { Link, useNavigate } from 'react-router-dom';
 import OrderItemsList from '../components/OrderItemsList';
 import { useOrder } from '../context/OrderContext';
@@ -6,6 +7,23 @@ import { useOrder } from '../context/OrderContext';
 function OrderSummary() {
   const { items, total, updateQuantity, removeItem } = useOrder();
   const navigate = useNavigate();
+
+  // Se llama cada vez que se toca la cantidad de una fila.
+  const handleQuantityChange = (item, quantity) => {
+    if (typeof item.stock === 'number' && quantity > item.stock) {
+      notifications.show({
+        title: 'No hay más stock',
+        message: 'Solo quedan ' + item.stock + ' ' + item.unit + ' de ' + item.name,
+        color: 'yellow',
+      });
+
+      // Lo dejamos en el máximo disponible en vez de ignorar el cambio.
+      updateQuantity(item.productId, item.stock);
+      return;
+    }
+
+    updateQuantity(item.productId, quantity);
+  };
 
   // Carrito vacío.
   if (items.length === 0) {
@@ -35,7 +53,7 @@ function OrderSummary() {
         <OrderItemsList
           items={items}
           editable
-          onQuantityChange={updateQuantity}
+          onQuantityChange={handleQuantityChange}
           onRemove={removeItem}
         />
       </Card>

@@ -251,11 +251,12 @@ return {
 | `createProduct` | `POST /products` | `{ name, price, unit }` |
 | `updateProduct` | `PUT /products/:id` | `{ name, price, unit }` |
 | `deleteProduct` | `DELETE /products/:id` | — |
+| `decreaseStock` | `POST /products/decrease-stock` ⚠️ tentativo | `{ items: [{ productId, quantity }] }` |
 
 `getProducts` tiene que devolver un **array plano**:
 
 ```json
-[ { "id": 1, "name": "Asado de tira", "price": 8900, "unit": "kg" } ]
+[ { "id": 1, "name": "Asado de tira", "price": 8900, "unit": "kg", "stock": 25 } ]
 ```
 
 ### Riesgos de desajuste
@@ -266,6 +267,8 @@ return {
 | --- | --- |
 | ✅ **Paginación de Spring**: la respuesta viene `{ "content": [...], "totalElements": 6 }` | `products.map(...)` rompe: no es un array. **El riesgo más probable de todos** |
 | El back usa nombres en castellano (`nombre`, `precio`) | La tarjeta se ve vacía y con `$undefined` |
+| ✅ El backend no manda `stock` | `normalizeProduct()` lo deja en `undefined`, que significa "sin control de stock": la UI no bloquea nada. Si mandara `0`, **toda la tienda se vería agotada** |
+| `decrease-stock`: el endpoint es un invento nuestro | Hay que acordarlo. La alternativa razonable es que el **order-service descuente el stock solo** al confirmar el pedido, y que el front no llame a nada (ver abajo) |
 | ✅ No existe el campo `unit` | `ProductList` y la factura imprimen "8900 / undefined" |
 | ✅ `price` viene como string `"8900.00"` (BigDecimal serializado) | Los totales se rompen: `"8900.00" * 2` funciona, pero las sumas concatenan texto |
 | `DELETE` devuelve 200 con body en vez de 204 | No rompe: `deleteProduct` ignora la respuesta |
@@ -279,6 +282,22 @@ const response = await axiosClient.get('/products');
 return Array.isArray(response.data) ? response.data : response.data.content;
 ```
 
+### Quién descuenta el stock: a definir con Persona 1
+
+Hoy el front llama a `decreaseStock()` desde `CheckoutPage`, entre crear el
+pedido y cobrar. Funciona para el mock, pero **en el backend real lo más sano es
+que lo haga el order-service dentro de la misma transacción** que crea el pedido:
+así no puede quedar un pedido creado con el stock sin descontar si se cae la red
+en el medio.
+
+Si se resuelve de ese lado, el cambio en el front es borrar tres líneas de
+`CheckoutPage.jsx` (la llamada a `decreaseStock` y su bandera
+`stockDescontado`). El resto de la pantalla no se toca.
+
+Lo que **no** cambia en ninguno de los dos casos: el backend tiene que validar
+el stock él mismo y responder un error claro si no alcanza. El control del front
+es solo para no dejar que el usuario llegue hasta el pago en vano.
+
 ### Checklist
 
 - [ ] La grilla carga los productos del back, no los seis del mock
@@ -288,6 +307,10 @@ return Array.isArray(response.data) ? response.data : response.data.content;
 - [ ] Admin → editar precio → se refleja en las dos pantallas
 - [ ] Admin → borrar → desaparece y el modal se cierra solo
 - [ ] Recargar la página: los cambios **siguen ahí** (antes se perdían, eran memoria)
+- [ ] El stock que muestra cada tarjeta es el del backend
+- [ ] Un producto con stock 0 se ve apagado, con el badge "Agotado" y el botón deshabilitado
+- [ ] Comprar descuenta el stock, y al volver al catálogo se ve el número nuevo
+- [ ] Si el stock no alcanza, **no se cobra** y el carrito queda intacto
 
 ---
 

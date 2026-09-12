@@ -27,7 +27,7 @@ import {
 
 const UNITS = ['kg', 'unidad'];
 
-const emptyForm = { name: '', price: 0, unit: 'kg' };
+const emptyForm = { name: '', price: 0, unit: 'kg', stock: 0 };
 
 function AdminProductsPage() {
   const [products, setProducts] = useState([]);
@@ -66,7 +66,12 @@ function AdminProductsPage() {
   const openEdit = (product) => {
     setEditing(product);
     // Precargamos el formulario con los datos del producto.
-    setForm({ name: product.name, price: product.price, unit: product.unit });
+    setForm({
+      name: product.name,
+      price: product.price,
+      unit: product.unit,
+      stock: product.stock ?? 0,
+    });
     formHandlers.open();
   };
 
@@ -135,6 +140,7 @@ function AdminProductsPage() {
                 <Table.Th>Nombre</Table.Th>
                 <Table.Th ta="right">Precio</Table.Th>
                 <Table.Th>Unidad</Table.Th>
+                <Table.Th ta="right">Stock</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>
@@ -147,6 +153,12 @@ function AdminProductsPage() {
                   </Table.Td>
                   <Table.Td ta="right">${product.price}</Table.Td>
                   <Table.Td>{product.unit}</Table.Td>
+                  <Table.Td ta="right">
+                    {/* Sin stock lo marcamos en rojo para que salte a la vista */}
+                    <Text c={product.stock === 0 ? 'red' : undefined} fw={product.stock === 0 ? 700 : undefined}>
+                      {product.stock ?? '—'}
+                    </Text>
+                  </Table.Td>
                   <Table.Td>
                     <Group gap="xs" justify="flex-end">
                       <ActionIcon
@@ -200,6 +212,15 @@ function AdminProductsPage() {
           mt="md"
           value={form.price}
           onChange={(value) => setForm({ ...form, price: Number(value) || 0 })}
+        />
+
+        <NumberInput
+          label="Stock disponible"
+          description="En cero, el producto se muestra agotado en el catálogo"
+          min={0}
+          mt="md"
+          value={form.stock}
+          onChange={(value) => setForm({ ...form, stock: Number(value) || 0 })}
         />
 
         <Select

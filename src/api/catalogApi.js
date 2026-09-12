@@ -9,12 +9,14 @@ import { toNumber, unwrapList } from './normalize';
 // sesión. Los cambios se pierden al recargar la página, que es lo esperable
 // de un mock (no hay base de datos atrás).
 let mockProducts = [
-  { id: 1, name: 'Asado de tira', price: 8900, unit: 'kg' },
-  { id: 2, name: 'Vacío', price: 9500, unit: 'kg' },
-  { id: 3, name: 'Bife de chorizo', price: 11200, unit: 'kg' },
-  { id: 4, name: 'Pollo entero', price: 4500, unit: 'kg' },
-  { id: 5, name: 'Chorizo criollo', price: 6800, unit: 'kg' },
-  { id: 6, name: 'Milanesas de ternera', price: 10400, unit: 'kg' },
+  { id: 1, name: 'Asado de tira', price: 8900, unit: 'kg', stock: 25 },
+  { id: 2, name: 'Vacío', price: 9500, unit: 'kg', stock: 12 },
+  { id: 3, name: 'Bife de chorizo', price: 11200, unit: 'kg', stock: 8 },
+  { id: 4, name: 'Pollo entero', price: 4500, unit: 'kg', stock: 30 },
+  // Stock bajo a propósito, para probar el aviso de "no hay más".
+  { id: 5, name: 'Chorizo criollo', price: 6800, unit: 'kg', stock: 2 },
+  // En cero a propósito, para ver la tarjeta agotada.
+  { id: 6, name: 'Milanesas de ternera', price: 10400, unit: 'kg', stock: 0 },
 ];
 
 // Para darle un id nuevo a cada producto creado.
@@ -32,6 +34,13 @@ function normalizeProduct(product) {
     price: toNumber(product.price),
     // Si el backend no maneja unidades, asumimos kg (es una carnicería).
     unit: product.unit ?? 'kg',
+    // Si el backend NO manda stock, lo dejamos en undefined a propósito: eso
+    // significa "sin control de stock" y la UI no bloquea nada. Si lo
+    // pusiéramos en 0, la tienda entera se vería agotada.
+    stock:
+      product.stock === undefined || product.stock === null
+        ? undefined
+        : toNumber(product.stock),
   };
 }
 
@@ -92,4 +101,49 @@ export async function deleteProduct(id) {
   }
 
   await axiosClient.delete(`/products/${id}`);
+}
+
+// Descuenta el stock de un pedido confirmado.
+// items: [{ productId, quantity }]
+export async function decreaseStock(items) {
+  if (USE_MOCK_CATALOG) {
+    await delay(400);
+
+    // Primero revisamos TODO y recién después descontamos. Si no, podríamos
+    // descontar la mitad del pedido y cortar al llegar al producto sin stock,
+    // dejando el inventario inconsistente.
+    for (const item of items) {
+      const product = mockProducts.find((p) => p.id === item.productId);
+
+      if (!product) {
+        throw new Error("El producto #" + item.productId + " ya no está disponible.");
+      }
+
+      if (product.stock < item.quantity) {
+        throw new Error(
+          "No hay stock suficiente de " + product.name + ": quedan " +
+            product.stock + " " + product.unit + ".",
+        );
+      }
+    }
+
+    mockProducts = mockProducts.map((product) => {
+      const item = items.find((i) => i.productId === product.id);
+
+      if (!item) {
+        return product;
+      }
+
+      // Math.max evita que quede en negativo por las dudas.
+      return { ...product, stock: Math.max(0, product.stock - item.quantity) };
+    });
+
+    return [...mockProducts];
+  }
+
+  // OJO: endpoint tentativo, hay que confirmarlo con el backend. Otra opción
+  // razonable es que el order-service descuente el stock solo al confirmar el
+  // pedido y que el front no llame a nada.
+  const response = await axiosClient.post('/products/decrease-stock', { items });
+  return unwrapList(response.data).map(normalizeProduct);
 }
