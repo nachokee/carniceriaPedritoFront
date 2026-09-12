@@ -1,5 +1,6 @@
 import { ActionIcon, NumberInput, Table, Text } from '@mantine/core';
 import { IconTrash } from '@tabler/icons-react';
+import { formatCurrency } from '../format';
 
 // Tabla de items del pedido, compartida por OrderSummary, CheckoutPage y
 // OrderConfirmationPage.
@@ -38,7 +39,7 @@ function OrderItemsList({ items, editable = false, onQuantityChange, onRemove })
 
               <Table.Td>
                 <Text c="dimmed">
-                  ${item.price} / {item.unit}
+                  {formatCurrency(item.price)} / {item.unit}
                 </Text>
               </Table.Td>
 
@@ -65,7 +66,7 @@ function OrderItemsList({ items, editable = false, onQuantityChange, onRemove })
               </Table.Td>
 
               <Table.Td ta="right">
-                <Text fw={700}>${item.price * item.quantity}</Text>
+                <Text fw={700}>{formatCurrency(item.price * item.quantity)}</Text>
               </Table.Td>
 
               {editable && (
@@ -89,7 +90,7 @@ function OrderItemsList({ items, editable = false, onQuantityChange, onRemove })
             <Table.Th colSpan={3}>Total</Table.Th>
             <Table.Th ta="right">
               <Text fw={700} size="lg">
-                ${total}
+                {formatCurrency(total)}
               </Text>
             </Table.Th>
             {editable && <Table.Th />}

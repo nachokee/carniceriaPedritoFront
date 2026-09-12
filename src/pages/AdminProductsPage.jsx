@@ -2,10 +2,8 @@ import {
   ActionIcon,
   Button,
   Card,
-  Center,
   Container,
   Group,
-  Loader,
   Modal,
   NumberInput,
   Select,
@@ -14,25 +12,34 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
-import { useEffect, useState } from 'react';
+import { IconPackage, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
+import { useState } from 'react';
 import {
   createProduct,
   deleteProduct,
   getProducts,
   updateProduct,
 } from '../api/catalogApi';
+import { EmptyState, ScreenError, ScreenLoader } from '../components/ScreenStates';
+import { formatCurrency } from '../format';
+import { useAsync } from '../useAsync';
 
 const UNITS = ['kg', 'unidad'];
 
 const emptyForm = { name: '', price: 0, unit: 'kg', stock: 0 };
 
 function AdminProductsPage() {
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // reload() vuelve a pedir la lista después de cada alta, edición o baja.
+  const { data, loading, error, reload } = useAsync(() => getProducts(), []);
+  const products = data ?? [];
+
   const [saving, setSaving] = useState(false);
+
+  // En celular el modal ocupa toda la pantalla: con el teclado abierto, un
+  // modal flotante queda apretado y no se llega a los botones.
+  const isMobile = useMediaQuery('(max-width: 48em)');
 
   // useDisclosure es un atajo de Mantine para manejar abierto/cerrado.
   const [formOpened, formHandlers] = useDisclosure(false);
@@ -44,27 +51,19 @@ function AdminProductsPage() {
   const [deleting, setDeleting] = useState(null);
   const [form, setForm] = useState(emptyForm);
 
-  // Vuelve a pedir la lista al backend (o al mock). La llamamos al entrar y
-  // después de cada alta, edición o baja.
-  async function loadProducts() {
-    const data = await getProducts();
-    setProducts(data);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    // oxlint-disable-next-line react/set-state-in-effect -- loadProducts es async: el setState corre después del await, no en el render
-    loadProducts();
-  }, []);
+  // Un mensaje por campo: { name: 'Poné un nombre', price: '...' }
+  const [formErrors, setFormErrors] = useState({});
 
   const openCreate = () => {
     setEditing(null);
     setForm(emptyForm);
+    setFormErrors({});
     formHandlers.open();
   };
 
   const openEdit = (product) => {
     setEditing(product);
+    setFormErrors({});
     // Precargamos el formulario con los datos del producto.
     setForm({
       name: product.name,
@@ -75,7 +74,36 @@ function AdminProductsPage() {
     formHandlers.open();
   };
 
+  // Devuelve un objeto con un mensaje por cada campo que esté mal.
+  // Si está todo bien, devuelve un objeto vacío.
+  function validateForm() {
+    const errors = {};
+
+    if (!form.name.trim()) {
+      errors.name = 'Poné un nombre';
+    }
+
+    if (form.price <= 0) {
+      errors.price = 'El precio tiene que ser mayor a 0';
+    }
+
+    if (form.stock < 0) {
+      errors.stock = 'El stock no puede ser negativo';
+    }
+
+    return errors;
+  }
+
   const handleSave = async () => {
+    const errors = validateForm();
+
+    // Object.keys(...).length cuenta cuántos campos fallaron.
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+
+    setFormErrors({});
     setSaving(true);
 
     try {
@@ -90,9 +118,13 @@ function AdminProductsPage() {
       }
 
       formHandlers.close();
-      await loadProducts();
-    } catch (error) {
-      notifications.show({ title: 'No se pudo guardar', message: error.message, color: 'red' });
+      reload();
+    } catch (requestError) {
+      notifications.show({
+        title: 'No se pudo guardar',
+        message: requestError.message,
+        color: 'red',
+      });
     } finally {
       setSaving(false);
     }
@@ -106,25 +138,39 @@ function AdminProductsPage() {
       notifications.show({ message: 'Producto borrado', color: 'green' });
 
       deleteHandlers.close();
-      await loadProducts();
-    } catch (error) {
-      notifications.show({ title: 'No se pudo borrar', message: error.message, color: 'red' });
+      reload();
+    } catch (requestError) {
+      notifications.show({
+        title: 'No se pudo borrar',
+        message: requestError.message,
+        color: 'red',
+      });
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) {
+    return <ScreenLoader label="Cargando productos…" />;
+  }
+
+  if (error) {
     return (
-      <Center h={300}>
-        <Loader />
-      </Center>
+      <ScreenError
+        title="No pudimos cargar los productos"
+        message={error}
+        onRetry={reload}
+        backTo="/admin/orders"
+        backLabel="Ir a pedidos"
+      />
     );
   }
 
   return (
     <Container size="md" py="xl">
-      <Group justify="space-between" mb="lg">
+      {/* wrap="wrap": en celular el botón baja abajo del título en vez de
+          apretarse contra el borde. */}
+      <Group justify="space-between" mb="lg" wrap="wrap" gap="sm">
         <Title order={2}>Productos</Title>
 
         <Button leftSection={<IconPlus size={18} />} onClick={openCreate}>
@@ -132,74 +178,87 @@ function AdminProductsPage() {
         </Button>
       </Group>
 
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Table.ScrollContainer minWidth={500}>
-          <Table verticalSpacing="sm">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Nombre</Table.Th>
-                <Table.Th ta="right">Precio</Table.Th>
-                <Table.Th>Unidad</Table.Th>
-                <Table.Th ta="right">Stock</Table.Th>
-                <Table.Th />
-              </Table.Tr>
-            </Table.Thead>
-
-            <Table.Tbody>
-              {products.map((product) => (
-                <Table.Tr key={product.id}>
-                  <Table.Td>
-                    <Text fw={700}>{product.name}</Text>
-                  </Table.Td>
-                  <Table.Td ta="right">${product.price}</Table.Td>
-                  <Table.Td>{product.unit}</Table.Td>
-                  <Table.Td ta="right">
-                    {/* Sin stock lo marcamos en rojo para que salte a la vista */}
-                    <Text c={product.stock === 0 ? 'red' : undefined} fw={product.stock === 0 ? 700 : undefined}>
-                      {product.stock ?? '—'}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs" justify="flex-end">
-                      <ActionIcon
-                        variant="subtle"
-                        onClick={() => openEdit(product)}
-                        aria-label={`Editar ${product.name}`}
-                      >
-                        <IconPencil size={18} />
-                      </ActionIcon>
-
-                      <ActionIcon
-                        variant="subtle"
-                        color="red"
-                        onClick={() => {
-                          setDeleting(product);
-                          deleteHandlers.open();
-                        }}
-                        aria-label={`Borrar ${product.name}`}
-                      >
-                        <IconTrash size={18} />
-                      </ActionIcon>
-                    </Group>
-                  </Table.Td>
+      {products.length === 0 ? (
+        <EmptyState
+          icon={<IconPackage size={56} />}
+          title="No hay productos cargados"
+          message="Creá el primero con el botón de arriba."
+        />
+      ) : (
+        <Card shadow="sm" padding={{ base: 'sm', sm: 'lg' }} radius="md" withBorder>
+          <Table.ScrollContainer minWidth={500}>
+            <Table verticalSpacing="sm">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Nombre</Table.Th>
+                  <Table.Th ta="right">Precio</Table.Th>
+                  <Table.Th>Unidad</Table.Th>
+                  <Table.Th ta="right">Stock</Table.Th>
+                  <Table.Th />
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
-      </Card>
+              </Table.Thead>
+
+              <Table.Tbody>
+                {products.map((product) => (
+                  <Table.Tr key={product.id}>
+                    <Table.Td>
+                      <Text fw={700}>{product.name}</Text>
+                    </Table.Td>
+                    <Table.Td ta="right">{formatCurrency(product.price)}</Table.Td>
+                    <Table.Td>{product.unit}</Table.Td>
+                    <Table.Td ta="right">
+                      {/* Sin stock lo marcamos en rojo para que salte a la vista */}
+                      <Text
+                        c={product.stock === 0 ? 'red' : undefined}
+                        fw={product.stock === 0 ? 700 : undefined}
+                      >
+                        {product.stock ?? '—'}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap="xs" justify="flex-end" wrap="nowrap">
+                        <ActionIcon
+                          variant="subtle"
+                          onClick={() => openEdit(product)}
+                          aria-label={`Editar ${product.name}`}
+                        >
+                          <IconPencil size={18} />
+                        </ActionIcon>
+
+                        <ActionIcon
+                          variant="subtle"
+                          color="red"
+                          onClick={() => {
+                            setDeleting(product);
+                            deleteHandlers.open();
+                          }}
+                          aria-label={`Borrar ${product.name}`}
+                        >
+                          <IconTrash size={18} />
+                        </ActionIcon>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
+        </Card>
+      )}
 
       {/* Modal de alta/edición */}
       <Modal
         opened={formOpened}
         onClose={formHandlers.close}
         title={editing ? 'Editar producto' : 'Nuevo producto'}
+        fullScreen={isMobile}
       >
         <TextInput
           label="Nombre"
           placeholder="Asado de tira"
           required
           value={form.name}
+          error={formErrors.name}
           onChange={(event) =>
             setForm({ ...form, name: event.currentTarget.value })
           }
@@ -211,6 +270,7 @@ function AdminProductsPage() {
           min={0}
           mt="md"
           value={form.price}
+          error={formErrors.price}
           onChange={(value) => setForm({ ...form, price: Number(value) || 0 })}
         />
 
@@ -220,6 +280,7 @@ function AdminProductsPage() {
           min={0}
           mt="md"
           value={form.stock}
+          error={formErrors.stock}
           onChange={(value) => setForm({ ...form, stock: Number(value) || 0 })}
         />
 
@@ -236,16 +297,22 @@ function AdminProductsPage() {
             Cancelar
           </Button>
 
-          <Button onClick={handleSave} loading={saving} disabled={!form.name.trim()}>
+          <Button onClick={handleSave} loading={saving}>
             Guardar
           </Button>
         </Group>
       </Modal>
 
       {/* Modal de confirmación de borrado */}
-      <Modal opened={deleteOpened} onClose={deleteHandlers.close} title="Borrar producto">
+      <Modal
+        opened={deleteOpened}
+        onClose={deleteHandlers.close}
+        title="Borrar producto"
+        fullScreen={isMobile}
+      >
         <Text>
-          ¿Seguro que querés borrar <strong>{deleting?.name}</strong>? No se puede deshacer.
+          ¿Seguro que querés borrar <strong>{deleting?.name}</strong>? No se puede
+          deshacer.
         </Text>
 
         <Group justify="flex-end" mt="lg">

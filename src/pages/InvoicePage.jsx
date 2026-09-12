@@ -1,26 +1,22 @@
 import {
-  Alert,
   Badge,
   Button,
   Card,
-  Center,
   Container,
   Divider,
   Group,
-  Loader,
   Stack,
   Table,
   Text,
   Title,
 } from '@mantine/core';
-import { IconAlertCircle, IconPrinter } from '@tabler/icons-react';
-import { useEffect, useState } from 'react';
+import { IconPrinter } from '@tabler/icons-react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { generateInvoice } from '../api/invoiceApi';
+import { ScreenError, ScreenLoader } from '../components/ScreenStates';
 import { useAuth } from '../context/AuthContext';
-
-// Formatea la fecha ISO que devuelve la API a algo legible: 11/9/2026, 10:45
-const formatDate = (value) => new Date(value).toLocaleString('es-AR');
+import { formatCurrency, formatDateTime } from '../format';
+import { useAsync } from '../useAsync';
 
 function InvoicePage() {
   // useParams lee la parte variable de la URL: /invoice/mock-123 → 'mock-123'
@@ -28,72 +24,57 @@ function InvoicePage() {
   const location = useLocation();
   const { user } = useAuth();
 
-  const [invoice, setInvoice] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const items = location.state?.items;
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadInvoice() {
-      try {
-        const data = await generateInvoice(orderId, {
-          customer: { name: user.name, email: user.email },
-          // Los items vienen de la confirmación. Solo los usa el mock.
-          items: location.state?.items,
-        });
-
-        // Si la persona se fue de la pantalla antes de que llegue la respuesta,
-        // no intentamos actualizar un componente que ya no está.
-        if (!cancelled) setInvoice(data);
-      } catch (requestError) {
-        if (!cancelled) setError(requestError.message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    loadInvoice();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [orderId, user, location.state]);
+  const {
+    data: invoice,
+    loading,
+    error,
+    reload,
+  } = useAsync(
+    () =>
+      generateInvoice(orderId, {
+        customer: { name: user.name, email: user.email },
+        // Los items vienen de la confirmación. Solo los usa el mock.
+        items,
+      }),
+    [orderId, user.id],
+  );
 
   if (loading) {
-    return (
-      <Center h={300}>
-        <Loader />
-      </Center>
-    );
+    return <ScreenLoader label="Generando la factura…" />;
   }
 
   if (error) {
     return (
-      <Container size="sm" py="xl">
-        <Alert color="red" icon={<IconAlertCircle size={18} />} title="No pudimos generar la factura">
-          {error}
-        </Alert>
-
-        <Button component={Link} to="/" mt="md">
-          Volver a productos
-        </Button>
-      </Container>
+      <ScreenError
+        title="No pudimos generar la factura"
+        message={error}
+        onRetry={reload}
+        backTo="/mis-pedidos"
+        backLabel="Volver a mis pedidos"
+      />
     );
   }
 
   return (
     <Container size="md" py="xl">
-      <Card shadow="sm" padding="xl" radius="md" withBorder>
-        {/* Encabezado: número de factura, fecha y estado */}
-        <Group justify="space-between" align="flex-start">
+      <Card
+        shadow="sm"
+        padding={{ base: 'md', sm: 'xl' }}
+        radius="md"
+        withBorder
+      >
+        {/* Encabezado: número de factura, fecha y estado.
+            wrap="wrap" hace que en celular el bloque de la derecha baje solo. */}
+        <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
           <div>
             <Title order={2}>Factura</Title>
             <Text c="dimmed" size="sm">
               N° {invoice.invoiceId} · Pedido #{invoice.orderId}
             </Text>
             <Text c="dimmed" size="sm">
-              {formatDate(invoice.date)}
+              {formatDateTime(invoice.date)}
             </Text>
           </div>
 
@@ -114,9 +95,9 @@ function InvoicePage() {
           <Text size="sm" c="dimmed">
             Facturado a
           </Text>
-          <Text fw={700}>{invoice.customer.name}</Text>
+          <Text fw={700}>{invoice.customer?.name ?? '—'}</Text>
           <Text size="sm" c="dimmed">
-            {invoice.customer.email}
+            {invoice.customer?.email ?? '—'}
           </Text>
         </div>
 
@@ -141,8 +122,8 @@ function InvoicePage() {
                   <Table.Td ta="right">
                     {item.quantity} {item.unit}
                   </Table.Td>
-                  <Table.Td ta="right">${item.price}</Table.Td>
-                  <Table.Td ta="right">${item.subtotal}</Table.Td>
+                  <Table.Td ta="right">{formatCurrency(item.price)}</Table.Td>
+                  <Table.Td ta="right">{formatCurrency(item.subtotal)}</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
@@ -154,20 +135,23 @@ function InvoicePage() {
         <Group justify="flex-end" gap="xl">
           <Text c="dimmed">Total</Text>
           <Text fw={700} size="xl">
-            ${invoice.total}
+            {formatCurrency(invoice.total)}
           </Text>
         </Group>
       </Card>
 
       {/* no-print: estos botones no salen en la impresión (ver index.css) */}
-      <Group justify="space-between" mt="lg" className="no-print">
+      <Group justify="space-between" mt="lg" wrap="wrap" className="no-print">
         <Button component={Link} to="/" variant="subtle" color="gray">
           Volver a productos
         </Button>
 
         {/* window.print() abre el diálogo del navegador; desde ahí se puede
             elegir "Guardar como PDF". */}
-        <Button leftSection={<IconPrinter size={18} />} onClick={() => window.print()}>
+        <Button
+          leftSection={<IconPrinter size={18} />}
+          onClick={() => window.print()}
+        >
           Descargar factura
         </Button>
       </Group>
