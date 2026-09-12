@@ -1,17 +1,17 @@
 import axiosClient from './axiosClient';
+import { USE_MOCK_INVOICES } from '../config';
 
-// Mismo patrón que los otros api/: mientras no exista el invoice-service,
-// armamos la factura acá con los datos que ya tenemos en el front.
-const USE_MOCK = true;
+// El flag vive en src/config.js (se puede pisar con VITE_USE_MOCK_INVOICES en .env).
+// En true devolvemos datos falsos; en false pegamos contra invoice-service.
 
 // details = { customer, items } y SOLO lo usa el mock.
 //
 // ¿Por qué hace falta? Porque el backend real va a buscar el pedido en la base
 // con el orderId, pero el mock no tiene base: si no le pasamos los items no
-// tiene de dónde sacarlos. Cuando USE_MOCK pase a false, este parámetro se
+// tiene de dónde sacarlos. Cuando USE_MOCK_INVOICES pase a false, este parámetro se
 // ignora y la pantalla no cambia.
 export async function generateInvoice(orderId, details) {
-  if (USE_MOCK) {
+  if (USE_MOCK_INVOICES) {
     await new Promise((resolve) => setTimeout(resolve, 700));
 
     if (!details?.items?.length) {

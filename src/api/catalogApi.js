@@ -1,8 +1,8 @@
 import axiosClient from './axiosClient';
+import { USE_MOCK_CATALOG } from '../config';
 
-// Mientras no exista el catalog-service, trabajamos con datos de prueba.
-// Cuando el backend esté listo, poner USE_MOCK en false (o borrar el flag).
-const USE_MOCK = true;
+// El flag vive en src/config.js (se puede pisar con VITE_USE_MOCK_CATALOG en .env).
+// En true devolvemos datos falsos; en false pegamos contra catalog-service.
 
 // let y no const: las funciones de admin reemplazan esta lista durante la
 // sesión. Los cambios se pierden al recargar la página, que es lo esperable
@@ -22,7 +22,7 @@ let nextId = 7;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function getProducts() {
-  if (USE_MOCK) {
+  if (USE_MOCK_CATALOG) {
     // Devolvemos una COPIA del array, no el original. Si devolviéramos siempre
     // el mismo array, React vería la misma referencia al volver a cargar la
     // lista y no redibujaría la tabla después de crear o borrar un producto.
@@ -36,7 +36,7 @@ export async function getProducts() {
 // --- Funciones de administración ---
 
 export async function createProduct(product) {
-  if (USE_MOCK) {
+  if (USE_MOCK_CATALOG) {
     await delay(400);
 
     const created = { id: nextId, ...product };
@@ -51,7 +51,7 @@ export async function createProduct(product) {
 }
 
 export async function updateProduct(id, updates) {
-  if (USE_MOCK) {
+  if (USE_MOCK_CATALOG) {
     await delay(400);
 
     // map arma una lista nueva: al producto que coincide le pisamos los campos
@@ -68,7 +68,7 @@ export async function updateProduct(id, updates) {
 }
 
 export async function deleteProduct(id) {
-  if (USE_MOCK) {
+  if (USE_MOCK_CATALOG) {
     await delay(400);
 
     mockProducts = mockProducts.filter((product) => product.id !== id);

@@ -1,11 +1,11 @@
 import axiosClient from './axiosClient';
+import { USE_MOCK_PAYMENTS } from '../config';
 
-// Mismo patrón que catalogApi.js, orderApi.js y authApi.js: mientras no exista
-// el payment-service, devolvemos una respuesta falsa.
-const USE_MOCK = true;
+// El flag vive en src/config.js (se puede pisar con VITE_USE_MOCK_PAYMENTS en .env).
+// En true devolvemos datos falsos; en false pegamos contra payment-service.
 
 export async function processPayment(orderId, paymentInfo) {
-  if (USE_MOCK) {
+  if (USE_MOCK_PAYMENTS) {
     // 1,2s para que se vea el estado "procesando" del botón.
     await new Promise((resolve) => setTimeout(resolve, 1200));
 

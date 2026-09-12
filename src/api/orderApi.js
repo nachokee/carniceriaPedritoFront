@@ -1,8 +1,8 @@
 import axiosClient from './axiosClient';
+import { USE_MOCK_ORDERS } from '../config';
 
-// Mismo patrón que catalogApi.js: mientras no exista el order-service,
-// devolvemos una respuesta falsa. Cuando esté listo, poner USE_MOCK en false.
-const USE_MOCK = true;
+// El flag vive en src/config.js (se puede pisar con VITE_USE_MOCK_ORDERS en .env).
+// En true devolvemos datos falsos; en false pegamos contra order-service.
 
 // let y no const: updateOrderStatus reemplaza esta lista durante la sesión.
 // Cada pedido lleva userId y customerName porque el panel de admin muestra
@@ -58,7 +58,7 @@ let mockOrders = [
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function submitOrder(items, userId) {
-  if (USE_MOCK) {
+  if (USE_MOCK_ORDERS) {
     // Esperamos 800ms para simular la demora de una llamada real y poder ver
     // el estado "cargando" del botón.
     await delay(800);
@@ -73,7 +73,7 @@ export async function submitOrder(items, userId) {
 }
 
 export async function getOrdersByUser(userId) {
-  if (USE_MOCK) {
+  if (USE_MOCK_ORDERS) {
     await delay(600);
 
     // El mock sí filtra por usuario, igual que va a hacer el backend.
@@ -87,7 +87,7 @@ export async function getOrdersByUser(userId) {
 // --- Funciones de administración ---
 
 export async function getAllOrders() {
-  if (USE_MOCK) {
+  if (USE_MOCK_ORDERS) {
     await delay(600);
 
     // Copia, por el mismo motivo que en catalogApi.getProducts().
@@ -99,7 +99,7 @@ export async function getAllOrders() {
 }
 
 export async function updateOrderStatus(orderId, status) {
-  if (USE_MOCK) {
+  if (USE_MOCK_ORDERS) {
     await delay(400);
 
     mockOrders = mockOrders.map((order) =>

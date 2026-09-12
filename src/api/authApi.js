@@ -1,8 +1,8 @@
 import axiosClient from './axiosClient';
+import { USE_MOCK_AUTH } from '../config';
 
-// Mismo patrón que catalogApi.js y orderApi.js: mientras no exista el
-// auth-service, devolvemos datos falsos. Después poner USE_MOCK en false.
-const USE_MOCK = true;
+// El flag vive en src/config.js (se puede pisar con VITE_USE_MOCK_AUTH en .env).
+// En true devolvemos datos falsos; en false pegamos contra auth-service.
 
 // Dos usuarios de prueba, uno de cada rol.
 const mockCustomer = {
@@ -23,7 +23,7 @@ const mockAdmin = {
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function login(email, password) {
-  if (USE_MOCK) {
+  if (USE_MOCK_AUTH) {
     await delay(600);
 
     // Truco para poder probar los dos roles sin backend: si el email tiene la
@@ -40,7 +40,7 @@ export async function login(email, password) {
 }
 
 export async function register(name, email, password) {
-  if (USE_MOCK) {
+  if (USE_MOCK_AUTH) {
     await delay(600);
 
     // Quien se registra siempre arranca como cliente: los admin se crean
@@ -60,7 +60,7 @@ export async function register(name, email, password) {
 }
 
 export async function logout() {
-  if (USE_MOCK) {
+  if (USE_MOCK_AUTH) {
     return;
   }
 
