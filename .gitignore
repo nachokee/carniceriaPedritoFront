@@ -25,3 +25,9 @@ dist-ssr
 
 # Variables de entorno locales
 .env
+
+# Resultados de los tests (se regeneran al correrlos, no van al repo)
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

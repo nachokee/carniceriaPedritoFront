@@ -47,8 +47,19 @@ function CheckoutPage() {
   // reintentar no hay que descontarlo de nuevo.
   const [stockDescontado, setStockDescontado] = useState(false);
 
+  // Se prende cuando la compra terminó bien, justo antes de vaciar el carrito.
+  //
+  // Hace falta por esto: al terminar, la pantalla hace dos cosas casi a la vez,
+  // navegar a la confirmación y vaciar el carrito. Si el carrito queda vacío
+  // antes de que la navegación termine, el chequeo de acá abajo se dispara y
+  // manda a /pedido, tapando la confirmación. La compra se hacía igual, pero la
+  // persona nunca veía la pantalla de "¡Gracias por tu compra!" y le quedaba la
+  // sensación de que algo falló. Lo encontró el test de punta a punta.
+  const [compraTerminada, setCompraTerminada] = useState(false);
+
   // Si alguien entra a /checkout con el carrito vacío, lo mandamos al pedido.
-  if (items.length === 0) {
+  // Salvo que el carrito esté vacío justamente porque acaba de comprar.
+  if (items.length === 0 && !compraTerminada) {
     return <Navigate to="/pedido" replace />;
   }
 
@@ -130,6 +141,11 @@ function CheckoutPage() {
 
       // Paso 4: salió todo bien. Le pasamos los datos a la pantalla de
       // confirmación por el "state" de navigate, porque el carrito se vacía acá.
+      //
+      // El orden importa: primero avisamos que la compra terminó (si no, vaciar
+      // el carrito nos rebota a /pedido antes de llegar a la confirmación).
+      setCompraTerminada(true);
+
       navigate('/order-confirmation', {
         replace: true,
         state: { orderId: currentOrderId, payment, items, total },
