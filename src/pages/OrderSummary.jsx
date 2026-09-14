@@ -39,7 +39,7 @@ function OrderSummary() {
           icon={<IconShoppingCartOff size={56} />}
           title="Tu carrito está vacío"
           message="Agregá productos del catálogo para poder hacer el pedido."
-          actionTo="/"
+          actionTo="/catalogo"
           actionLabel="Ver productos"
         />
       ) : (

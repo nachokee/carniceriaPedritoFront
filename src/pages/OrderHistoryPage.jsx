@@ -48,7 +48,7 @@ function OrderHistoryPage() {
           icon={<IconPackage size={56} />}
           title="Todavía no hiciste ningún pedido"
           message="Cuando compres algo, lo vas a ver acá con su factura."
-          actionTo="/"
+          actionTo="/catalogo"
           actionLabel="Ver productos"
         />
       ) : (

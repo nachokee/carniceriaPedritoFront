@@ -12,7 +12,7 @@ function OrderConfirmationPage() {
   // Si alguien entra directo a /order-confirmation (o recarga la página), no
   // hay state: lo mandamos al listado de productos.
   if (!data) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/catalogo" replace />;
   }
 
   return (
@@ -41,7 +41,7 @@ function OrderConfirmationPage() {
       </Card>
 
       <Group mt="lg" wrap="wrap">
-        <Button component={Link} to="/" w={{ base: '100%', xs: 'auto' }}>
+        <Button component={Link} to="/catalogo" w={{ base: '100%', xs: 'auto' }}>
           Hacer otro pedido
         </Button>
 

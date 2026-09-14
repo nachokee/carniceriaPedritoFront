@@ -17,7 +17,7 @@ function AdminRoute({ children }) {
   }
 
   if (!isAdmin) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/catalogo" replace />;
   }
 
   return (

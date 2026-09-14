@@ -54,6 +54,21 @@ function Navbar() {
         </Button>
       )}
 
+      {/* Desde que la home es la landing, el catálogo tiene su propia URL
+          (/catalogo): sin este botón, un usuario logueado no tendría cómo
+          volver a la lista de productos desde el pedido o la factura. */}
+      <Button
+        component={Link}
+        to="/catalogo"
+        variant="subtle"
+        fullWidth={fullWidth}
+        justify={fullWidth ? 'flex-start' : undefined}
+        leftSection={<IconMeat size={18} />}
+        onClick={drawer.close}
+      >
+        Catálogo
+      </Button>
+
       <Button
         component={Link}
         to="/mis-pedidos"
@@ -72,7 +87,9 @@ function Navbar() {
     <>
       <Container size="lg" h="100%">
         <Group h="100%" justify="space-between" wrap="nowrap">
-          {/* component={Link} hace que el Group navegue sin recargar la página */}
+          {/* component={Link} hace que el Group navegue sin recargar la página.
+              El logo va a "/" (la pantalla de inicio), como en cualquier sitio.
+              Para ir a los productos está el botón "Catálogo". */}
           <Group gap="xs" component={Link} to="/" wrap="nowrap">
             <IconMeat size={26} />
             <Text fw={700} size="lg">

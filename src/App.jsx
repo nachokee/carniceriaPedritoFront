@@ -6,6 +6,7 @@ import { OrderProvider } from './context/OrderContext';
 import AdminOrdersPage from './pages/AdminOrdersPage';
 import AdminProductsPage from './pages/AdminProductsPage';
 import CheckoutPage from './pages/CheckoutPage';
+import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import InvoicePage from './pages/InvoicePage';
 import OrderConfirmationPage from './pages/OrderConfirmationPage';
@@ -23,14 +24,19 @@ function App() {
       <OrderProvider>
         <BrowserRouter>
           <Routes>
-            {/* Pantallas públicas */}
+            {/* Pantallas públicas.
+                La pantalla de inicio va SIN ProtectedRoute a propósito: es la
+                vidriera del negocio y tiene que verse sin estar logueado. Trae
+                su propio header, por eso tampoco va adentro del AppShell. */}
+            <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
 
             {/* Pantallas privadas: ProtectedRoute manda al login si no hay sesión.
-                El flujo completo es: / → /pedido → /checkout → /order-confirmation */}
+                El flujo completo es:
+                / → /catalogo → /pedido → /checkout → /order-confirmation */}
             <Route
-              path="/"
+              path="/catalogo"
               element={
                 <ProtectedRoute>
                   <ProductList />

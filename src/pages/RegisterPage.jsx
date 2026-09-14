@@ -63,7 +63,7 @@ function RegisterPage() {
 
     try {
       await register(name, email, password);
-      navigate('/', { replace: true });
+      navigate('/catalogo', { replace: true });
     } catch (requestError) {
       setError(
         requestError.message ?? 'No pudimos crear la cuenta. Intentá de nuevo.',

@@ -20,6 +20,23 @@ a {
   text-decoration: none;
 }
 
+/* Los links con # (los del header de la pantalla de inicio) bajan solos hasta
+   la sección en vez de saltar de golpe. */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Tarjetas que son un link entero (categorías y ofertas de la pantalla de
+   inicio): al pasar el mouse se les marca el borde, para que se note que se
+   pueden clickear. */
+.card-link {
+  transition: border-color 150ms ease;
+}
+
+.card-link:hover {
+  border-color: var(--mantine-color-red-4);
+}
+
 /* Estilos para cuando se imprime la factura (window.print()).
    Todo lo que tenga class="no-print" desaparece: header, botones, etc. */
 @media print {

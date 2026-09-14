@@ -1,5 +1,6 @@
 import {
   ActionIcon,
+  Badge,
   Button,
   Card,
   Container,
@@ -22,13 +23,22 @@ import {
   getProducts,
   updateProduct,
 } from '../api/catalogApi';
+import { CATEGORIES, DEFAULT_CATEGORY, getCategoryColor } from '../categories';
 import { EmptyState, ScreenError, ScreenLoader } from '../components/ScreenStates';
 import { formatCurrency } from '../format';
 import { useAsync } from '../useAsync';
 
 const UNITS = ['kg', 'unidad'];
 
-const emptyForm = { name: '', price: 0, unit: 'kg', stock: 0 };
+// Los productos nuevos arrancan en "Otros": el admin elige la categoría real
+// en el Select antes de guardar.
+const emptyForm = {
+  name: '',
+  price: 0,
+  unit: 'kg',
+  stock: 0,
+  category: DEFAULT_CATEGORY,
+};
 
 function AdminProductsPage() {
   // reload() vuelve a pedir la lista después de cada alta, edición o baja.
@@ -70,6 +80,9 @@ function AdminProductsPage() {
       price: product.price,
       unit: product.unit,
       stock: product.stock ?? 0,
+      // Un producto viejo (o de un backend que todavía no manda el campo)
+      // puede no tener categoría: lo mostramos como "Otros".
+      category: product.category ?? DEFAULT_CATEGORY,
     });
     formHandlers.open();
   };
@@ -186,11 +199,15 @@ function AdminProductsPage() {
         />
       ) : (
         <Card shadow="sm" padding={{ base: 'sm', sm: 'lg' }} radius="md" withBorder>
-          <Table.ScrollContainer minWidth={500}>
+          {/* minWidth subió a 620 porque la tabla tiene una columna más
+              (Categoría): abajo de ese ancho se scrollea en horizontal en vez
+              de amontonarse. */}
+          <Table.ScrollContainer minWidth={620}>
             <Table verticalSpacing="sm">
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Nombre</Table.Th>
+                  <Table.Th>Categoría</Table.Th>
                   <Table.Th ta="right">Precio</Table.Th>
                   <Table.Th>Unidad</Table.Th>
                   <Table.Th ta="right">Stock</Table.Th>
@@ -203,6 +220,16 @@ function AdminProductsPage() {
                   <Table.Tr key={product.id}>
                     <Table.Td>
                       <Text fw={700}>{product.name}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      {/* El color sale de getCategoryColor: mismo criterio que
+                          en las tarjetas del catálogo. */}
+                      <Badge
+                        color={getCategoryColor(product.category)}
+                        variant="light"
+                      >
+                        {product.category ?? DEFAULT_CATEGORY}
+                      </Badge>
                     </Table.Td>
                     <Table.Td ta="right">{formatCurrency(product.price)}</Table.Td>
                     <Table.Td>{product.unit}</Table.Td>
@@ -261,6 +288,21 @@ function AdminProductsPage() {
           error={formErrors.name}
           onChange={(event) =>
             setForm({ ...form, name: event.currentTarget.value })
+          }
+        />
+
+        {/* Las opciones salen de CATEGORIES (src/categories.js), así que el
+            admin solo puede elegir una de las categorías que el catálogo sabe
+            filtrar. allowDeselect={false} evita que quede en null al volver a
+            clickear la opción ya elegida. */}
+        <Select
+          label="Categoría"
+          data={CATEGORIES}
+          mt="md"
+          allowDeselect={false}
+          value={form.category}
+          onChange={(value) =>
+            setForm({ ...form, category: value ?? DEFAULT_CATEGORY })
           }
         />
 

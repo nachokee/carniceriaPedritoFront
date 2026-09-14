@@ -142,7 +142,7 @@ function InvoicePage() {
 
       {/* no-print: estos botones no salen en la impresión (ver index.css) */}
       <Group justify="space-between" mt="lg" wrap="wrap" className="no-print">
-        <Button component={Link} to="/" variant="subtle" color="gray">
+        <Button component={Link} to="/catalogo" variant="subtle" color="gray">
           Volver a productos
         </Button>
 
