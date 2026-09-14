@@ -23,6 +23,16 @@ Usuarios de prueba (la contraseña no se valida mientras esté mockeado):
   imprimible e historial de pedidos.
 - **Admin**: alta/edición/baja de productos y gestión de estados de pedidos.
 
+## Tests
+
+```bash
+npm test          # unitarios y de componentes (Vitest + Testing Library)
+npm run test:e2e  # de punta a punta (Playwright) — la primera vez: npx playwright install chromium
+```
+
+Los dos corren contra los mocks (`USE_MOCK_*` en `true`), así que no hace falta
+tener el backend levantado. Los detalles están en [TESTING.md](TESTING.md).
+
 ## Migración al backend
 
 Cada archivo de `src/api/` tiene un flag `USE_MOCK` (hoy en `true`) y la llamada
@@ -44,3 +54,7 @@ La URL del backend se configura con `VITE_API_URL` (ver `.env.example`).
 - `npm run dev` — servidor de desarrollo
 - `npm run build` — build de producción
 - `npm run lint` — oxlint
+- `npm test` — tests unitarios y de componentes (una vez)
+- `npm run test:watch` — los mismos, quedándose a mirar los archivos
+- `npm run test:e2e` — tests de punta a punta
+- `npm run test:e2e:ui` — los e2e con ventana, para verlos paso a paso
