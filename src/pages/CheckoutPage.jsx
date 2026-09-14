@@ -13,6 +13,7 @@ import {
 import { IconAlertCircle } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { decreaseStock } from '../api/catalogApi';
 import { submitOrder } from '../api/orderApi';
 import { processPayment } from '../api/paymentApi';
 import OrderItemsList from '../components/OrderItemsList';
@@ -30,46 +31,60 @@ function CheckoutPage() {
   const [cvv, setCvv] = useState('');
 
   const [processing, setProcessing] = useState(false);
+
+  // Dos tipos de error distintos:
+  // - fieldErrors: lo que está mal en un campo, se muestra debajo del campo.
+  // - error: lo que falló del lado del servidor (pago rechazado, sin stock,
+  //   red caída), se muestra como Alert arriba de los botones.
+  const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState(null);
 
   // Guardamos el orderId cuando el pedido se crea bien. Si después falla el
   // pago, al reintentar reusamos este id en vez de crear un pedido nuevo.
   const [orderId, setOrderId] = useState(null);
 
+  // Lo mismo con el stock: si ya lo descontamos y después falla el pago, al
+  // reintentar no hay que descontarlo de nuevo.
+  const [stockDescontado, setStockDescontado] = useState(false);
+
   // Si alguien entra a /checkout con el carrito vacío, lo mandamos al pedido.
   if (items.length === 0) {
     return <Navigate to="/pedido" replace />;
   }
 
-  // Chequeos mínimos de formato. Devuelve un texto de error, o null si está todo bien.
+  // Chequeos mínimos de formato, un mensaje por campo.
   function validate() {
+    const errors = {};
+
+    // En efectivo no hay nada que validar.
     if (method !== 'tarjeta') {
-      return null;
+      return errors;
     }
 
     if (cardNumber.replace(/\s/g, '').length !== 16) {
-      return 'El número de tarjeta tiene que tener 16 dígitos.';
+      errors.cardNumber = 'Tiene que tener 16 dígitos';
     }
 
-    if (expiry.length !== 5) {
-      return 'El vencimiento va en formato MM/AA.';
+    if (!/^\d{2}\/\d{2}$/.test(expiry)) {
+      errors.expiry = 'Formato MM/AA';
     }
 
     if (cvv.length !== 3) {
-      return 'El código de seguridad tiene 3 dígitos.';
+      errors.cvv = 'Son 3 dígitos';
     }
 
-    return null;
+    return errors;
   }
 
   const handlePay = async () => {
-    const validationError = validate();
+    const errors = validate();
 
-    if (validationError) {
-      setError(validationError);
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
       return;
     }
 
+    setFieldErrors({});
     setError(null);
     setProcessing(true);
 
@@ -83,7 +98,22 @@ function CheckoutPage() {
         setOrderId(currentOrderId);
       }
 
-      // Paso 2: cobrar. En producción los datos de la tarjeta irían directo a
+      // Paso 2: descontar el stock ANTES de cobrar. Si algún producto se quedó
+      // sin stock mientras la persona completaba el checkout, decreaseStock
+      // lanza un error y cortamos acá: no se cobra nada y el carrito queda
+      // intacto para que pueda ajustar el pedido.
+      if (!stockDescontado) {
+        await decreaseStock(
+          items.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+          })),
+        );
+
+        setStockDescontado(true);
+      }
+
+      // Paso 3: cobrar. En producción los datos de la tarjeta irían directo a
       // la pasarela de pago, nunca a nuestro backend.
       const paymentInfo =
         method === 'tarjeta' ? { method, cardNumber, expiry, cvv } : { method };
@@ -92,11 +122,13 @@ function CheckoutPage() {
 
       // El pago puede responder OK (200) pero venir rechazado: hay que mirar el status.
       if (payment.status !== 'approved') {
-        setError(payment.message ?? 'El pago fue rechazado. Probá con otro medio de pago.');
+        setError(
+          payment.message ?? 'El pago fue rechazado. Probá con otro medio de pago.',
+        );
         return;
       }
 
-      // Paso 3: salió todo bien. Le pasamos los datos a la pantalla de
+      // Paso 4: salió todo bien. Le pasamos los datos a la pantalla de
       // confirmación por el "state" de navigate, porque el carrito se vacía acá.
       navigate('/order-confirmation', {
         replace: true,
@@ -105,8 +137,8 @@ function CheckoutPage() {
 
       clearOrder();
     } catch (requestError) {
-      // Acá caen los errores de red o del servidor (el pedido o el pago nunca
-      // llegaron a procesarse). El carrito queda intacto para reintentar.
+      // Acá caen los errores de red o del servidor y la falta de stock. En
+      // todos los casos el carrito queda intacto para poder reintentar.
       setError(requestError.message);
     } finally {
       setProcessing(false);
@@ -119,7 +151,7 @@ function CheckoutPage() {
         Checkout
       </Title>
 
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
+      <Card shadow="sm" padding={{ base: 'sm', sm: 'lg' }} radius="md" withBorder>
         <Text fw={700} mb="sm">
           Tu pedido
         </Text>
@@ -127,7 +159,13 @@ function CheckoutPage() {
         <OrderItemsList items={items} />
       </Card>
 
-      <Card shadow="sm" padding="lg" radius="md" withBorder mt="md">
+      <Card
+        shadow="sm"
+        padding={{ base: 'sm', sm: 'lg' }}
+        radius="md"
+        withBorder
+        mt="md"
+      >
         <Radio.Group
           value={method}
           onChange={setMethod}
@@ -147,16 +185,22 @@ function CheckoutPage() {
               label="Número de tarjeta"
               placeholder="4111111111111111"
               maxLength={16}
+              inputMode="numeric"
               value={cardNumber}
+              error={fieldErrors.cardNumber}
               onChange={(event) => setCardNumber(event.currentTarget.value)}
             />
 
-            <Group grow>
+            {/* grow reparte el ancho entre los dos campos; en celular Mantine
+                los apila solo si no entran. */}
+            <Group grow align="flex-start">
               <TextInput
                 label="Vencimiento"
                 placeholder="12/28"
                 maxLength={5}
+                inputMode="numeric"
                 value={expiry}
+                error={fieldErrors.expiry}
                 onChange={(event) => setExpiry(event.currentTarget.value)}
               />
 
@@ -164,7 +208,9 @@ function CheckoutPage() {
                 label="CVV"
                 placeholder="123"
                 maxLength={3}
+                inputMode="numeric"
                 value={cvv}
+                error={fieldErrors.cvv}
                 onChange={(event) => setCvv(event.currentTarget.value)}
               />
             </Group>
@@ -177,17 +223,36 @@ function CheckoutPage() {
       </Card>
 
       {error && (
-        <Alert color="red" icon={<IconAlertCircle size={18} />} mt="md" title="No se pudo pagar">
+        <Alert
+          color="red"
+          icon={<IconAlertCircle size={18} />}
+          mt="md"
+          title="No se pudo completar la compra"
+        >
           {error}
         </Alert>
       )}
 
-      <Group justify="space-between" mt="lg">
-        <Button component={Link} to="/pedido" variant="subtle" color="gray">
+      {/* En celular (base) cada botón ocupa todo el ancho y quedan uno abajo
+          del otro, con el de pagar último, cerca del pulgar. Desde xs vuelven
+          a la misma fila. */}
+      <Group justify="space-between" mt="lg" wrap="wrap">
+        <Button
+          component={Link}
+          to="/pedido"
+          variant="subtle"
+          color="gray"
+          w={{ base: '100%', xs: 'auto' }}
+        >
           Volver al pedido
         </Button>
 
-        <Button size="md" loading={processing} onClick={handlePay}>
+        <Button
+          size="md"
+          loading={processing}
+          onClick={handlePay}
+          w={{ base: '100%', xs: 'auto' }}
+        >
           Confirmar y pagar
         </Button>
       </Group>

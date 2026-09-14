@@ -26,7 +26,13 @@ function OrderConfirmationPage() {
         {data.payment.paymentId && ` · Pago #${data.payment.paymentId}`}
       </Alert>
 
-      <Card shadow="sm" padding="lg" radius="md" withBorder mt="md">
+      <Card
+        shadow="sm"
+        padding={{ base: 'sm', sm: 'lg' }}
+        radius="md"
+        withBorder
+        mt="md"
+      >
         <Text fw={700} mb="sm">
           Resumen
         </Text>
@@ -34,8 +40,8 @@ function OrderConfirmationPage() {
         <OrderItemsList items={data.items} />
       </Card>
 
-      <Group mt="lg">
-        <Button component={Link} to="/">
+      <Group mt="lg" wrap="wrap">
+        <Button component={Link} to="/" w={{ base: '100%', xs: 'auto' }}>
           Hacer otro pedido
         </Button>
 
@@ -46,6 +52,7 @@ function OrderConfirmationPage() {
           to={`/invoice/${data.orderId}`}
           state={{ items: data.items }}
           variant="light"
+          w={{ base: '100%', xs: 'auto' }}
           leftSection={<IconFileInvoice size={18} />}
         >
           Ver factura

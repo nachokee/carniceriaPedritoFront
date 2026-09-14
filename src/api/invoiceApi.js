@@ -1,17 +1,48 @@
 import axiosClient from './axiosClient';
+import { USE_MOCK_INVOICES } from '../config';
+import { normalizeStatus, toNumber } from './normalize';
 
-// Mismo patrón que los otros api/: mientras no exista el invoice-service,
-// armamos la factura acá con los datos que ya tenemos en el front.
-const USE_MOCK = true;
+// El flag vive en src/config.js (se puede pisar con VITE_USE_MOCK_INVOICES en .env).
+// En true devolvemos datos falsos; en false pegamos contra invoice-service.
 
 // details = { customer, items } y SOLO lo usa el mock.
 //
 // ¿Por qué hace falta? Porque el backend real va a buscar el pedido en la base
 // con el orderId, pero el mock no tiene base: si no le pasamos los items no
-// tiene de dónde sacarlos. Cuando USE_MOCK pase a false, este parámetro se
+// tiene de dónde sacarlos. Cuando USE_MOCK_INVOICES pase a false, este parámetro se
 // ignora y la pantalla no cambia.
+// La factura tiene su propia forma: los items llevan subtotal ya calculado y
+// no llevan productId. Si el backend manda los datos del cliente planos
+// (customerName / customerEmail), acá los volvemos a anidar.
+function normalizeInvoice(data, orderId) {
+  const items = (data.items ?? []).map((item) => ({
+    name: item.name ?? item.productName,
+    quantity: toNumber(item.quantity),
+    unit: item.unit ?? 'kg',
+    price: toNumber(item.price),
+    subtotal: toNumber(
+      item.subtotal ?? toNumber(item.price) * toNumber(item.quantity),
+    ),
+  }));
+
+  return {
+    invoiceId: data.invoiceId ?? data.id,
+    orderId: data.orderId ?? orderId,
+    date: data.date ?? data.issuedAt ?? data.createdAt,
+    customer: data.customer ?? {
+      name: data.customerName,
+      email: data.customerEmail,
+    },
+    items,
+    total: toNumber(
+      data.total ?? items.reduce((sum, item) => sum + item.subtotal, 0),
+    ),
+    status: normalizeStatus(data.status) || 'emitida',
+  };
+}
+
 export async function generateInvoice(orderId, details) {
-  if (USE_MOCK) {
+  if (USE_MOCK_INVOICES) {
     await new Promise((resolve) => setTimeout(resolve, 700));
 
     if (!details?.items?.length) {
@@ -44,5 +75,5 @@ export async function generateInvoice(orderId, details) {
   }
 
   const response = await axiosClient.get(`/invoices/${orderId}`);
-  return response.data;
+  return normalizeInvoice(response.data, orderId);
 }

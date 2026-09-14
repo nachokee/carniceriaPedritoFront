@@ -1,5 +1,6 @@
 import { ActionIcon, NumberInput, Table, Text } from '@mantine/core';
 import { IconTrash } from '@tabler/icons-react';
+import { formatCurrency } from '../format';
 
 // Tabla de items del pedido, compartida por OrderSummary, CheckoutPage y
 // OrderConfirmationPage.
@@ -11,6 +12,8 @@ import { IconTrash } from '@tabler/icons-react';
 // - items: [{ productId, name, price, unit, quantity }]
 // - editable: si es true muestra el NumberInput y el tacho de basura
 // - onQuantityChange / onRemove: solo hacen falta si editable es true
+//   onQuantityChange recibe el item entero (no solo el id) para que la
+//   pantalla pueda avisar si la cantidad se pasó del stock.
 function OrderItemsList({ items, editable = false, onQuantityChange, onRemove }) {
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
@@ -36,7 +39,7 @@ function OrderItemsList({ items, editable = false, onQuantityChange, onRemove })
 
               <Table.Td>
                 <Text c="dimmed">
-                  ${item.price} / {item.unit}
+                  {formatCurrency(item.price)} / {item.unit}
                 </Text>
               </Table.Td>
 
@@ -46,10 +49,11 @@ function OrderItemsList({ items, editable = false, onQuantityChange, onRemove })
                     value={item.quantity}
                     // NumberInput puede devolver texto (''), por eso lo pasamos
                     // por Number() antes de guardarlo.
-                    onChange={(value) =>
-                      onQuantityChange(item.productId, Number(value) || 0)
-                    }
+                    onChange={(value) => onQuantityChange(item, Number(value) || 0)}
                     min={0}
+                    // max: Mantine ya no deja escribir más que el stock. Igual
+                    // la pantalla avisa, para que se entienda por qué frenó.
+                    max={item.stock}
                     step={1}
                     w={90}
                     aria-label={`Cantidad de ${item.name}`}
@@ -62,7 +66,7 @@ function OrderItemsList({ items, editable = false, onQuantityChange, onRemove })
               </Table.Td>
 
               <Table.Td ta="right">
-                <Text fw={700}>${item.price * item.quantity}</Text>
+                <Text fw={700}>{formatCurrency(item.price * item.quantity)}</Text>
               </Table.Td>
 
               {editable && (
@@ -86,7 +90,7 @@ function OrderItemsList({ items, editable = false, onQuantityChange, onRemove })
             <Table.Th colSpan={3}>Total</Table.Th>
             <Table.Th ta="right">
               <Text fw={700} size="lg">
-                ${total}
+                {formatCurrency(total)}
               </Text>
             </Table.Th>
             {editable && <Table.Th />}

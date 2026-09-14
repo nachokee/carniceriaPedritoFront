@@ -1,8 +1,8 @@
 import axiosClient from './axiosClient';
+import { USE_MOCK_AUTH } from '../config';
 
-// Mismo patrón que catalogApi.js y orderApi.js: mientras no exista el
-// auth-service, devolvemos datos falsos. Después poner USE_MOCK en false.
-const USE_MOCK = true;
+// El flag vive en src/config.js (se puede pisar con VITE_USE_MOCK_AUTH en .env).
+// En true devolvemos datos falsos; en false pegamos contra auth-service.
 
 // Dos usuarios de prueba, uno de cada rol.
 const mockCustomer = {
@@ -22,8 +22,27 @@ const mockAdmin = {
 // Pequeña ayuda para simular la demora de una llamada real.
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// El backend puede devolver { user: {...}, token } o todo plano, y el token
+// puede llamarse accessToken o jwt. Acá dejamos siempre la forma que espera
+// AuthContext: { user: { id, name, email, role }, token }.
+function normalizeAuth(data) {
+  const rawUser = data.user ?? data;
+
+  return {
+    user: {
+      id: rawUser.id,
+      name: rawUser.name,
+      email: rawUser.email,
+      // Spring Security suele mandar ROLE_ADMIN o ADMIN; nosotros comparamos
+      // contra 'admin' en minúscula.
+      role: String(rawUser.role ?? 'cliente').toLowerCase().replace('role_', ''),
+    },
+    token: data.token ?? data.accessToken ?? data.jwt,
+  };
+}
+
 export async function login(email, password) {
-  if (USE_MOCK) {
+  if (USE_MOCK_AUTH) {
     await delay(600);
 
     // Truco para poder probar los dos roles sin backend: si el email tiene la
@@ -36,11 +55,11 @@ export async function login(email, password) {
   }
 
   const response = await axiosClient.post('/auth/login', { email, password });
-  return response.data;
+  return normalizeAuth(response.data);
 }
 
 export async function register(name, email, password) {
-  if (USE_MOCK) {
+  if (USE_MOCK_AUTH) {
     await delay(600);
 
     // Quien se registra siempre arranca como cliente: los admin se crean
@@ -56,11 +75,11 @@ export async function register(name, email, password) {
     email,
     password,
   });
-  return response.data;
+  return normalizeAuth(response.data);
 }
 
 export async function logout() {
-  if (USE_MOCK) {
+  if (USE_MOCK_AUTH) {
     return;
   }
 
