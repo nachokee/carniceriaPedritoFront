@@ -25,7 +25,7 @@ export function ScreenError({
   title = 'Algo salió mal',
   message,
   onRetry,
-  backTo = '/',
+  backTo = '/catalogo',
   backLabel = 'Volver a productos',
 }) {
   return (

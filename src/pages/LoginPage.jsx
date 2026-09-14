@@ -63,7 +63,7 @@ function LoginPage() {
     try {
       await login(email, password);
       // replace: true evita que "volver" en el navegador traiga de nuevo el login.
-      navigate('/', { replace: true });
+      navigate('/catalogo', { replace: true });
     } catch (requestError) {
       setError(
         requestError.message ??

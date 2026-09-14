@@ -248,16 +248,24 @@ return {
 | Función | Método y URL | Payload |
 | --- | --- | --- |
 | `getProducts` | `GET /products` | — |
-| `createProduct` | `POST /products` | `{ name, price, unit }` |
-| `updateProduct` | `PUT /products/:id` | `{ name, price, unit }` |
+| `getOffers` | `GET /products/offers` ⚠️ tentativo | — |
+| `createProduct` | `POST /products` | `{ name, price, unit, stock, category }` |
+| `updateProduct` | `PUT /products/:id` | `{ name, price, unit, stock, category }` |
 | `deleteProduct` | `DELETE /products/:id` | — |
 | `decreaseStock` | `POST /products/decrease-stock` ⚠️ tentativo | `{ items: [{ productId, quantity }] }` |
 
 `getProducts` tiene que devolver un **array plano**:
 
 ```json
-[ { "id": 1, "name": "Asado de tira", "price": 8900, "unit": "kg", "stock": 25 } ]
+[ { "id": 1, "name": "Asado de tira", "price": 8900, "unit": "kg", "stock": 25, "category": "Vacuno" } ]
 ```
+
+`category` es un string y los valores posibles están en
+[`src/categories.js`](src/categories.js): `Vacuno`, `Cerdo`, `Pollo`,
+`Embutidos`, `Otros`. **Preguntar a Persona 1** si del lado del back es un enum
+(`VACUNO`) o una tabla de categorías con su propio id (`{ "category": { "id":
+1, "name": "Vacuno" } }`): en cualquiera de los dos casos se traduce en
+`normalizeProduct()` y ninguna pantalla se entera.
 
 ### Riesgos de desajuste
 
@@ -270,6 +278,8 @@ return {
 | ✅ El backend no manda `stock` | `normalizeProduct()` lo deja en `undefined`, que significa "sin control de stock": la UI no bloquea nada. Si mandara `0`, **toda la tienda se vería agotada** |
 | `decrease-stock`: el endpoint es un invento nuestro | Hay que acordarlo. La alternativa razonable es que el **order-service descuente el stock solo** al confirmar el pedido, y que el front no llame a nada (ver abajo) |
 | ✅ No existe el campo `unit` | `ProductList` y la factura imprimen "8900 / undefined" |
+| ✅ No existe el campo `category`, o viene con otro nombre (`categoria`) | `normalizeProduct()` lo deja en `"Otros"`: el Badge se ve y el filtro funciona, pero **todo el catálogo cae en la misma categoría**. Si el back usa otro nombre, es un alias de una línea en el normalizador |
+| El back manda una categoría que **no** está en `CATEGORIES` (ej. `"Achuras"`) | La tarjeta muestra el Badge en gris y el producto **no aparece** al filtrar por ninguna categoría (solo en "Todas"). Se arregla agregando el valor a `src/categories.js` |
 | ✅ `price` viene como string `"8900.00"` (BigDecimal serializado) | Los totales se rompen: `"8900.00" * 2` funciona, pero las sumas concatenan texto |
 | `DELETE` devuelve 200 con body en vez de 204 | No rompe: `deleteProduct` ignora la respuesta |
 
@@ -281,6 +291,66 @@ const response = await axiosClient.get('/products');
 // Si viene paginado nos quedamos con content; si no, con el array tal cual.
 return Array.isArray(response.data) ? response.data : response.data.content;
 ```
+
+### Las ofertas de la pantalla de inicio
+
+`getOffers()` alimenta la sección "Ofertas de la semana" de
+[`LandingPage.jsx`](src/pages/LandingPage.jsx). Espera productos con dos campos
+más:
+
+```json
+{ "id": 1, "name": "Asado de tira", "price": 8900, "unit": "kg", "category": "Vacuno",
+  "onOffer": true, "discountPercent": 15 }
+```
+
+`discountedPrice` **no** viaja por la red: lo calcula el front en
+`withDiscountedPrice()` (`price * (1 - discountPercent / 100)`, redondeado a
+pesos enteros). Si el backend prefiere mandar el precio final ya calculado, se
+usa el suyo y se borra ese helper.
+
+**Preguntar a Persona 1:** ¿existe `GET /products/offers`? Si catalog-service no
+tiene un endpoint aparte, la alternativa —igual de válida— es traer todo con
+`GET /products` y filtrar por `onOffer` en `getOffers()`, sin segunda llamada:
+
+```js
+export async function getOffers() {
+  const products = await getProducts();
+  return products.filter((product) => product.onOffer).map(withDiscountedPrice);
+}
+```
+
+Si el backend todavía no tiene el concepto de oferta, la sección se ve vacía con
+el mensaje "Esta semana no hay ofertas" — no rompe nada.
+
+### La búsqueda y el filtro son del lado del front (por ahora)
+
+`ProductList.jsx` pide **todo** el catálogo con `getProducts()` y después filtra
+ese array en memoria: el buscador por nombre y el Select de categoría no le
+mandan nada al backend. Con el catálogo de una carnicería (decenas de productos)
+esto anda perfecto y es mucho más rápido que ir y volver al servidor por cada
+tecla.
+
+**Cuándo conviene cambiarlo:** cuando el catálogo pase de unos cuantos cientos
+de productos, o cuando el back tenga paginación de verdad. Ahí el cambio es:
+
+```js
+// catalogApi.js
+export async function getProducts({ search, category, page } = {}) {
+  const response = await axiosClient.get('/products', {
+    params: { search, category, page },
+  });
+  return unwrapList(response.data).map(normalizeProduct);
+}
+```
+
+Y en `ProductList.jsx`, volver a llamar a `getProducts` cuando cambian los
+filtros (con un *debounce* de ~300 ms para no disparar un request por tecla) en
+vez de filtrar el array. El resto de la pantalla —las tarjetas, el Badge, el
+estado vacío— no se toca.
+
+**Mientras tanto no hay nada que hacer:** el filtrado en el front sigue
+funcionando igual con el backend real, porque opera sobre lo que ya devolvió
+`getProducts()`.
 
 ### Quién descuenta el stock: a definir con Persona 1
 
@@ -300,8 +370,17 @@ es solo para no dejar que el usuario llegue hasta el pago en vano.
 
 ### Checklist
 
-- [ ] La grilla carga los productos del back, no los seis del mock
+- [ ] La grilla carga los productos del back, no los del mock
+- [ ] La pantalla de inicio (`/`) se ve **sin estar logueado**
+- [ ] Las tarjetas de categoría de la home llevan a `/catalogo?category=…` con el filtro ya puesto
+- [ ] La sección "Ofertas" muestra el precio viejo tachado y el nuevo, con el badge del porcentaje
 - [ ] Precio y unidad se ven bien (`$8900 / kg`, no `$undefined`)
+- [ ] Cada tarjeta muestra el Badge de categoría con la categoría del back, no todas en "Otros"
+- [ ] El buscador por nombre filtra mientras escribís, sin importar mayúsculas
+- [ ] El Select de categoría filtra, y combinado con el buscador filtra por las dos cosas
+- [ ] Buscar algo que no existe → se ve "No se encontraron productos", no la grilla vacía
+- [ ] Admin → crear un producto eligiendo categoría → el Badge correcto aparece en la tabla **y** en el catálogo
+- [ ] Admin → editar la categoría de un producto → se refleja en el filtro del cliente
 - [ ] "Agregar al pedido" suma al carrito y el contador del navbar sube
 - [ ] Admin → "Nuevo producto" → aparece en la tabla **y** en el catálogo del cliente
 - [ ] Admin → editar precio → se refleja en las dos pantallas
