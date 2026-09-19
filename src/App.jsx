@@ -9,6 +9,7 @@ import CheckoutPage from './pages/CheckoutPage';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import InvoicePage from './pages/InvoicePage';
+import NotFoundPage from './pages/NotFoundPage';
 import OrderConfirmationPage from './pages/OrderConfirmationPage';
 import OrderHistoryPage from './pages/OrderHistoryPage';
 import OrderSummary from './pages/OrderSummary';
@@ -102,6 +103,13 @@ function App() {
                 </AdminRoute>
               }
             />
+
+            {/* Comodín: agarra cualquier dirección que no haya coincidido con
+                ninguna de las de arriba. Va última a propósito — el router se
+                queda con la ruta más específica, pero dejarla acá hace evidente
+                que es la última opción. Sin ella, una URL mal escrita no
+                renderiza nada y se ve una pantalla en blanco. */}
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </BrowserRouter>
       </OrderProvider>
