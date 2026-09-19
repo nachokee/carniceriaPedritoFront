@@ -12,8 +12,13 @@ import { afterEach, vi } from 'vitest';
 // Después de cada test desmontamos lo que se haya renderizado. Si no, los
 // componentes de un test quedarían en pantalla durante el siguiente y las
 // búsquedas por texto encontrarían cosas de más.
+//
+// Y vaciamos localStorage: el carrito (y la sesión) se guardan ahí, y en jsdom
+// el storage es uno solo para todo el archivo de tests. Sin esto, un test que
+// agrega productos le dejaría el carrito puesto al siguiente.
 afterEach(() => {
   cleanup();
+  localStorage.clear();
 });
 
 // --- Cosas del navegador que jsdom no trae ---

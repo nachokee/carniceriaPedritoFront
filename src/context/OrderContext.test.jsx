@@ -1,6 +1,17 @@
-import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrderProvider, useOrder } from './OrderContext';
+
+// El carrito se guarda en localStorage y, al volver, se revisa contra el
+// catálogo. Reemplazamos catalogApi para decidir desde el test qué productos
+// "existen hoy", sin depender del mock de verdad ni de sus demoras.
+vi.mock('../api/catalogApi', () => ({ getProducts: vi.fn() }));
+
+// Lo importamos DESPUÉS del vi.mock para quedarnos con la versión falsa.
+import { getProducts } from '../api/catalogApi';
+
+// La misma clave que usa OrderContext.
+const STORAGE_KEY = 'carniceria_cart';
 
 // El carrito es la lógica más delicada de la app: si suma mal, el cliente paga
 // de más o de menos. Por eso es lo primero que conviene tener testeado.
@@ -25,6 +36,34 @@ const agotado = { id: 6, name: 'Milanesas', price: 10400, unit: 'kg', stock: 0 }
 
 // Mismo asado, pero con 15% de descuento: 8900 - 15% = 7565.
 const asadoEnOferta = { ...asado, onOffer: true, discountPercent: 15 };
+
+// El catálogo "de hoy" por defecto: están los cuatro productos, con su stock
+// original. Los tests que prueban la reconciliación lo pisan con el suyo.
+beforeEach(() => {
+  getProducts.mockResolvedValue([asado, pollo, casiAgotado, agotado]);
+});
+
+// Arma una fila de carrito como la que quedaría guardada en localStorage.
+function itemGuardado(product, quantity) {
+  return {
+    productId: product.id,
+    name: product.name,
+    price: product.price,
+    unit: product.unit,
+    stock: product.stock,
+    quantity,
+  };
+}
+
+// Deja un carrito guardado, como si la persona hubiera cerrado la pestaña.
+function dejarCarritoGuardado(items) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+}
+
+function leerCarritoGuardado() {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  return stored === null ? null : JSON.parse(stored);
+}
 
 describe('addItem', () => {
   it('agrega un producto nuevo con cantidad 1', () => {
@@ -254,5 +293,175 @@ describe('productos en oferta', () => {
     expect(result.current.items).toHaveLength(1);
     expect(result.current.items[0].price).toBe(7565);
     expect(result.current.total).toBe(15130);
+  });
+});
+
+// Antes el carrito vivía solo en memoria: un F5 en el medio de la compra y la
+// persona se quedaba sin nada. Ahora sobrevive, igual que la sesión.
+describe('el carrito sobrevive al refresh', () => {
+  it('guarda el pedido en localStorage al agregar un producto', () => {
+    const { result } = montarCarrito();
+
+    act(() => result.current.addItem(asado));
+
+    const guardado = leerCarritoGuardado();
+
+    expect(guardado).toHaveLength(1);
+    expect(guardado[0]).toMatchObject({ productId: 1, quantity: 1, price: 8900 });
+  });
+
+  it('guarda también los cambios de cantidad y las bajas', () => {
+    const { result } = montarCarrito();
+
+    act(() => result.current.addItem(asado));
+    act(() => result.current.addItem(pollo));
+    act(() => result.current.updateQuantity(1, 3));
+    act(() => result.current.removeItem(4));
+
+    const guardado = leerCarritoGuardado();
+
+    expect(guardado).toHaveLength(1);
+    expect(guardado[0]).toMatchObject({ productId: 1, quantity: 3 });
+  });
+
+  it('arranca con el pedido que había quedado guardado', () => {
+    dejarCarritoGuardado([itemGuardado(asado, 2), itemGuardado(pollo, 1)]);
+
+    const { result } = montarCarrito();
+
+    // Ya está puesto en el primer render: no hace falta esperar nada.
+    expect(result.current.items).toHaveLength(2);
+    expect(result.current.itemCount).toBe(2);
+    expect(result.current.total).toBe(22300); // 8900 x2 + 4500
+  });
+
+  it('arranca vacío si no hay nada guardado', () => {
+    const { result } = montarCarrito();
+
+    expect(result.current.items).toEqual([]);
+  });
+
+  // clearOrder se llama cuando la compra salió bien: el pedido ya comprado no
+  // tiene que reaparecer la próxima vez que la persona entre.
+  it('clearOrder borra el pedido guardado', () => {
+    const { result } = montarCarrito();
+
+    act(() => result.current.addItem(asado));
+    expect(leerCarritoGuardado()).not.toBeNull();
+
+    act(() => result.current.clearOrder());
+
+    expect(leerCarritoGuardado()).toBeNull();
+  });
+
+  it('vaciar el carrito a mano también lo borra del navegador', () => {
+    const { result } = montarCarrito();
+
+    act(() => result.current.addItem(asado));
+    act(() => result.current.removeItem(1));
+
+    expect(leerCarritoGuardado()).toBeNull();
+  });
+});
+
+describe('el carrito guardado puede venir roto', () => {
+  it('arranca vacío si lo guardado no es JSON', () => {
+    localStorage.setItem(STORAGE_KEY, 'esto no es json');
+
+    const { result } = montarCarrito();
+
+    expect(result.current.items).toEqual([]);
+  });
+
+  it('arranca vacío si lo guardado no es una lista', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ productId: 1 }));
+
+    const { result } = montarCarrito();
+
+    expect(result.current.items).toEqual([]);
+  });
+
+  // Una fila rota no se lleva puesto el pedido entero.
+  it('descarta las filas rotas y conserva las sanas', () => {
+    dejarCarritoGuardado([
+      itemGuardado(asado, 2),
+      null,
+      { productId: 99, name: 'Sin precio', quantity: 1 },
+      { ...itemGuardado(pollo, 1), quantity: 0 },
+    ]);
+
+    const { result } = montarCarrito();
+
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.items[0].productId).toBe(1);
+    // Y el total no queda en NaN, que es lo que pasaría con una fila sin precio.
+    expect(result.current.total).toBe(17800);
+  });
+});
+
+// Entre que la persona cargó el carrito y volvió, el catálogo pudo cambiar.
+describe('el carrito guardado se revisa contra el catálogo', () => {
+  it('saca los productos que ya no están en el catálogo', async () => {
+    dejarCarritoGuardado([itemGuardado(asado, 1), itemGuardado(pollo, 1)]);
+    // El admin borró el pollo mientras tanto.
+    getProducts.mockResolvedValue([asado]);
+
+    const { result } = montarCarrito();
+
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+    expect(result.current.items[0].productId).toBe(1);
+    expect(result.current.total).toBe(8900);
+  });
+
+  it('recorta la cantidad al stock que hay hoy', async () => {
+    // Guardó 5 kg de chorizo; hoy quedan 2.
+    dejarCarritoGuardado([{ ...itemGuardado(casiAgotado, 5), stock: 10 }]);
+    getProducts.mockResolvedValue([casiAgotado]);
+
+    const { result } = montarCarrito();
+
+    await waitFor(() => expect(result.current.items[0].quantity).toBe(2));
+    // Y la foto del stock queda actualizada, para que el carrito tope bien.
+    expect(result.current.items[0].stock).toBe(2);
+  });
+
+  it('saca los productos que se quedaron sin stock', async () => {
+    dejarCarritoGuardado([itemGuardado(asado, 1), { ...itemGuardado(agotado, 1), stock: 4 }]);
+    getProducts.mockResolvedValue([asado, agotado]);
+
+    const { result } = montarCarrito();
+
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+    expect(result.current.items[0].productId).toBe(1);
+  });
+
+  it('no toca el precio congelado en el carrito', async () => {
+    // El asado se guardó a 7565 (estaba en oferta) y hoy vale 8900 de lista.
+    dejarCarritoGuardado([{ ...itemGuardado(asado, 1), price: 7565 }]);
+    getProducts.mockResolvedValue([asado]);
+
+    const { result } = montarCarrito();
+
+    await waitFor(() => expect(result.current.items[0].stock).toBe(25));
+    expect(result.current.items[0].price).toBe(7565);
+  });
+
+  it('deja el carrito como estaba si el catálogo no responde', async () => {
+    dejarCarritoGuardado([itemGuardado(asado, 2)]);
+    getProducts.mockRejectedValue(new Error('El servidor no responde'));
+
+    const { result } = montarCarrito();
+
+    // Esperamos a que el pedido fallido termine de procesarse.
+    await waitFor(() => expect(getProducts).toHaveBeenCalled());
+
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.total).toBe(17800);
+  });
+
+  it('no le pide el catálogo al servidor si el carrito está vacío', () => {
+    montarCarrito();
+
+    expect(getProducts).not.toHaveBeenCalled();
   });
 });

@@ -121,6 +121,37 @@ test('el cliente compra dos productos y paga con tarjeta', async ({ page }) => {
   // El resumen muestra los dos productos comprados.
   await expect(page.getByText('Asado de tira')).toBeVisible();
   await expect(page.getByText('Pollo entero')).toBeVisible();
+
+  // --- 8. El pedido comprado no reaparece ---
+  // El carrito se guarda en el navegador, así que hay que asegurarse de que al
+  // terminar la compra se borre: si no, la próxima visita arrancaría con el
+  // pedido que la persona ya pagó.
+  await page.reload();
+  await page.getByRole('link', { name: 'Mi pedido' }).click();
+
+  await expect(page.getByText('Tu carrito está vacío')).toBeVisible();
+});
+
+test('el carrito sobrevive a recargar la página', async ({ page }) => {
+  // Antes el pedido vivía solo en memoria: un F5 en el medio de la compra (o
+  // cerrar la pestaña sin querer) dejaba a la persona con el carrito vacío.
+  await page.goto('/login');
+  await iniciarSesion(page);
+
+  await agregarProducto(page, 'Asado de tira');
+  await agregarProducto(page, 'Pollo entero');
+
+  await page.reload();
+
+  await page.getByRole('link', { name: 'Mi pedido' }).click();
+  await expect(page).toHaveURL('/pedido');
+
+  // Están los dos productos y el total es el mismo de antes del refresh.
+  await expect(page.getByText('Asado de tira')).toBeVisible();
+  await expect(page.getByText('Pollo entero')).toBeVisible();
+  await expect(
+    page.getByText(comoPrecio(PRECIO_ASADO + PRECIO_POLLO)).first(),
+  ).toBeVisible();
 });
 
 test('una tarjeta rechazada no rompe el pedido', async ({ page }) => {
