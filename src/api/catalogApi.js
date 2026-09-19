@@ -1,6 +1,7 @@
 import axiosClient from './axiosClient';
 import { DEFAULT_CATEGORY } from '../categories';
 import { USE_MOCK_CATALOG } from '../config';
+import { getDisplayPrice } from '../pricing';
 import { toNumber, unwrapList } from './normalize';
 
 // El flag vive en src/config.js (se puede pisar con VITE_USE_MOCK_CATALOG en .env).
@@ -91,17 +92,15 @@ function normalizeProduct(product) {
 }
 
 // Le agrega discountedPrice al producto: el precio ya con el descuento
-// aplicado. Lo calculamos acá, en un solo lugar, para que la pantalla solo
-// tenga que mostrar el número.
+// aplicado, para que la pantalla solo tenga que mostrar el número.
 //
-// Math.round redondea a pesos enteros: sin eso, 8900 * 0.85 puede dar algo
-// como 7564.999999 por cómo la computadora guarda los decimales.
+// La cuenta en sí vive en src/pricing.js (getDisplayPrice), que es la misma
+// que usan el catálogo y el carrito. Acá solo la guardamos con el nombre que
+// ya espera la pantalla de inicio.
 function withDiscountedPrice(product) {
-  const percent = toNumber(product.discountPercent);
-
   return {
     ...product,
-    discountedPrice: Math.round(product.price * (1 - percent / 100)),
+    discountedPrice: getDisplayPrice(product).price,
   };
 }
 

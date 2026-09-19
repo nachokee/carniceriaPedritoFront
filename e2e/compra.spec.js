@@ -14,8 +14,14 @@ const CLIENTE = { email: 'juan@mail.com', password: '123456' };
 const TARJETA_OK = { numero: '4111111111111111', vencimiento: '12/28', cvv: '123' };
 
 // Precios del catálogo mockeado, para poder calcular el total esperado.
-const PRECIO_ASADO = 8900;
-const PRECIO_POLLO = 4500;
+//
+// Los dos productos que compra el test están en oferta, así que lo que se cobra
+// es el precio CON descuento (la cuenta vive en src/pricing.js):
+//   Asado de tira: 8900 - 15% = 7565
+//   Pollo entero:  4500 - 10% = 4050
+// El precio de lista sigue apareciendo tachado al lado, pero no es el que suma.
+const PRECIO_ASADO = 7565;
+const PRECIO_POLLO = 4050;
 
 // El total se muestra formateado: "$ 13.400". El espacio que mete Intl entre
 // el $ y el número no es un espacio común, así que buscamos solo el número.

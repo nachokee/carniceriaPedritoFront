@@ -32,6 +32,7 @@ import { getOffers, getProducts } from '../api/catalogApi';
 import { CATEGORIES, getCategoryColor } from '../categories';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency } from '../format';
+import { getDisplayPrice } from '../pricing';
 import { useAsync } from '../useAsync';
 
 // Ícono de cada categoría. Vive acá y no en src/categories.js porque es algo
@@ -287,55 +288,62 @@ function LandingPage() {
             <Text c="dimmed">Esta semana no hay ofertas. ¡Volvé a mirar el lunes!</Text>
           ) : (
             <Grid>
-              {offers.map((product) => (
-                <Grid.Col key={product.id} span={{ base: 12, xs: 6, md: 4 }}>
-                  <Card
-                    component={Link}
-                    to="/catalogo"
-                    className="card-link"
-                    padding="lg"
-                    radius="md"
-                    withBorder
-                    h="100%"
-                  >
-                    {/* El badge del descuento arriba de todo, que es lo que
-                        hace que la tarjeta se mire. */}
-                    <Group justify="space-between" wrap="nowrap" mb="xs">
-                      <Badge color="red" variant="filled">
-                        -{product.discountPercent}%
-                      </Badge>
+              {offers.map((product) => {
+                // El mismo helper que usan el catálogo y el carrito: el precio
+                // que se muestra acá es exactamente el que se va a cobrar.
+                const { price, originalPrice, discountPercent } =
+                  getDisplayPrice(product);
 
-                      <Badge
-                        color={getCategoryColor(product.category)}
-                        variant="light"
-                        size="sm"
-                      >
-                        {product.category}
-                      </Badge>
-                    </Group>
+                return (
+                  <Grid.Col key={product.id} span={{ base: 12, xs: 6, md: 4 }}>
+                    <Card
+                      component={Link}
+                      to="/catalogo"
+                      className="card-link"
+                      padding="lg"
+                      radius="md"
+                      withBorder
+                      h="100%"
+                    >
+                      {/* El badge del descuento arriba de todo, que es lo que
+                          hace que la tarjeta se mire. */}
+                      <Group justify="space-between" wrap="nowrap" mb="xs">
+                        <Badge color="red" variant="filled">
+                          -{discountPercent}%
+                        </Badge>
 
-                    <Text fw={700} size="lg">
-                      {product.name}
-                    </Text>
+                        <Badge
+                          color={getCategoryColor(product.category)}
+                          variant="light"
+                          size="sm"
+                        >
+                          {product.category}
+                        </Badge>
+                      </Group>
 
-                    {/* El precio viejo tachado al lado del nuevo: se entiende
-                        de un vistazo cuánto se ahorra. */}
-                    <Group gap="xs" align="baseline" mt={4}>
-                      <Text c="dimmed" td="line-through" size="sm">
-                        {formatCurrency(product.price)}
+                      <Text fw={700} size="lg">
+                        {product.name}
                       </Text>
 
-                      <Text fw={700} size="xl" c="red">
-                        {formatCurrency(product.discountedPrice)}
-                      </Text>
+                      {/* El precio viejo tachado al lado del nuevo: se entiende
+                          de un vistazo cuánto se ahorra. */}
+                      <Group gap="xs" align="baseline" mt={4}>
+                        <Text c="dimmed" td="line-through" size="sm">
+                          {formatCurrency(originalPrice)}
+                        </Text>
 
-                      <Text c="dimmed" size="sm">
-                        / {product.unit}
-                      </Text>
-                    </Group>
-                  </Card>
-                </Grid.Col>
-              ))}
+                        <Text fw={700} size="xl" c="red">
+                          {formatCurrency(price)}
+                        </Text>
+
+                        <Text c="dimmed" size="sm">
+                          / {product.unit}
+                        </Text>
+                      </Group>
+                    </Card>
+                  </Grid.Col>
+                );
+              })}
             </Grid>
           )}
         </Container>

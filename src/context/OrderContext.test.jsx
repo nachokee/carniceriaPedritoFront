@@ -23,6 +23,9 @@ const pollo = { id: 4, name: 'Pollo entero', price: 4500, unit: 'kg', stock: 30 
 const casiAgotado = { id: 5, name: 'Chorizo criollo', price: 6800, unit: 'kg', stock: 2 };
 const agotado = { id: 6, name: 'Milanesas', price: 10400, unit: 'kg', stock: 0 };
 
+// Mismo asado, pero con 15% de descuento: 8900 - 15% = 7565.
+const asadoEnOferta = { ...asado, onOffer: true, discountPercent: 15 };
+
 describe('addItem', () => {
   it('agrega un producto nuevo con cantidad 1', () => {
     const { result } = montarCarrito();
@@ -208,5 +211,48 @@ describe('total e itemCount', () => {
     act(() => result.current.addItem(pollo));
 
     expect(result.current.itemCount).toBe(2);
+  });
+});
+
+// Antes el carrito guardaba product.price siempre: el cliente veía "-15%" en la
+// vidriera y pagaba el precio de lista. Estos tests son los que impiden que
+// eso vuelva a pasar.
+describe('productos en oferta', () => {
+  it('guarda el precio con descuento, no el de lista', () => {
+    const { result } = montarCarrito();
+
+    act(() => result.current.addItem(asadoEnOferta));
+
+    expect(result.current.items[0].price).toBe(7565);
+  });
+
+  it('el total usa el precio con descuento', () => {
+    const { result } = montarCarrito();
+
+    act(() => result.current.addItem(asadoEnOferta));
+    act(() => result.current.updateQuantity(1, 2));
+
+    expect(result.current.total).toBe(15130);
+  });
+
+  it('un producto sin oferta sigue guardando su precio de lista', () => {
+    const { result } = montarCarrito();
+
+    act(() => result.current.addItem(asado));
+
+    expect(result.current.items[0].price).toBe(8900);
+  });
+
+  // El precio se congela al agregar: si el catálogo cambia mientras la persona
+  // compra, lo que ya está en el carrito no se toca.
+  it('no repisa el precio si el producto vuelve a agregarse más caro', () => {
+    const { result } = montarCarrito();
+
+    act(() => result.current.addItem(asadoEnOferta));
+    act(() => result.current.addItem({ ...asado, price: 12000 }));
+
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.items[0].price).toBe(7565);
+    expect(result.current.total).toBe(15130);
   });
 });

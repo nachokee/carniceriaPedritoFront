@@ -8,6 +8,7 @@ import {
   Modal,
   NumberInput,
   Select,
+  Switch,
   Table,
   Text,
   TextInput,
@@ -26,18 +27,25 @@ import {
 import { CATEGORIES, DEFAULT_CATEGORY, getCategoryColor } from '../categories';
 import { EmptyState, ScreenError, ScreenLoader } from '../components/ScreenStates';
 import { formatCurrency } from '../format';
+import {
+  MAX_DISCOUNT_PERCENT,
+  MIN_DISCOUNT_PERCENT,
+  getDisplayPrice,
+} from '../pricing';
 import { useAsync } from '../useAsync';
 
 const UNITS = ['kg', 'unidad'];
 
-// Los productos nuevos arrancan en "Otros": el admin elige la categoría real
-// en el Select antes de guardar.
+// Los productos nuevos arrancan en "Otros" y sin oferta: el admin elige la
+// categoría real en el Select y prende la oferta si quiere, antes de guardar.
 const emptyForm = {
   name: '',
   price: 0,
   unit: 'kg',
   stock: 0,
   category: DEFAULT_CATEGORY,
+  onOffer: false,
+  discountPercent: 0,
 };
 
 function AdminProductsPage() {
@@ -83,6 +91,10 @@ function AdminProductsPage() {
       // Un producto viejo (o de un backend que todavía no manda el campo)
       // puede no tener categoría: lo mostramos como "Otros".
       category: product.category ?? DEFAULT_CATEGORY,
+      // Lo mismo con la oferta: si el producto no la tiene, el switch arranca
+      // apagado y el porcentaje en 0.
+      onOffer: Boolean(product.onOffer),
+      discountPercent: product.discountPercent ?? 0,
     });
     formHandlers.open();
   };
@@ -104,6 +116,18 @@ function AdminProductsPage() {
       errors.stock = 'El stock no puede ser negativo';
     }
 
+    // El porcentaje solo se controla si la oferta está prendida: con el switch
+    // apagado, el campo ni siquiera se ve.
+    if (
+      form.onOffer &&
+      (form.discountPercent < MIN_DISCOUNT_PERCENT ||
+        form.discountPercent > MAX_DISCOUNT_PERCENT)
+    ) {
+      errors.discountPercent =
+        'El descuento tiene que estar entre ' + MIN_DISCOUNT_PERCENT + '% y ' +
+        MAX_DISCOUNT_PERCENT + '%';
+    }
+
     return errors;
   }
 
@@ -119,14 +143,22 @@ function AdminProductsPage() {
     setFormErrors({});
     setSaving(true);
 
+    // Si la oferta quedó apagada mandamos el descuento en 0. Si no, un producto
+    // al que le sacaron la oferta se guardaría con el 15% viejo colgado y
+    // volvería a aplicarse el día que alguien vuelva a prender el switch.
+    const payload = {
+      ...form,
+      discountPercent: form.onOffer ? form.discountPercent : 0,
+    };
+
     try {
       // El mismo modal sirve para crear y para editar: la diferencia es si
       // editing tiene algo adentro.
       if (editing) {
-        await updateProduct(editing.id, form);
+        await updateProduct(editing.id, payload);
         notifications.show({ message: 'Producto actualizado', color: 'green' });
       } else {
-        await createProduct(form);
+        await createProduct(payload);
         notifications.show({ message: 'Producto creado', color: 'green' });
       }
 
@@ -219,7 +251,18 @@ function AdminProductsPage() {
                 {products.map((product) => (
                   <Table.Tr key={product.id}>
                     <Table.Td>
-                      <Text fw={700}>{product.name}</Text>
+                      {/* El badge de oferta va pegado al nombre para que el
+                          admin vea de un vistazo qué está con descuento, sin
+                          tener que agregar otra columna a la tabla. */}
+                      <Group gap="xs" wrap="nowrap">
+                        <Text fw={700}>{product.name}</Text>
+
+                        {product.onOffer && (
+                          <Badge color="red" variant="filled" size="sm">
+                            Oferta -{product.discountPercent}%
+                          </Badge>
+                        )}
+                      </Group>
                     </Table.Td>
                     <Table.Td>
                       {/* El color sale de getCategoryColor: mismo criterio que
@@ -231,7 +274,24 @@ function AdminProductsPage() {
                         {product.category ?? DEFAULT_CATEGORY}
                       </Badge>
                     </Table.Td>
-                    <Table.Td ta="right">{formatCurrency(product.price)}</Table.Td>
+                    <Table.Td ta="right">
+                      {/* Con oferta mostramos también lo que se cobra de
+                          verdad: el precio de lista solo, al lado del badge de
+                          descuento, se presta a confusión. */}
+                      {product.onOffer ? (
+                        <Group gap="xs" justify="flex-end" align="baseline" wrap="nowrap">
+                          <Text c="dimmed" td="line-through" size="sm">
+                            {formatCurrency(product.price)}
+                          </Text>
+
+                          <Text fw={700} c="red">
+                            {formatCurrency(getDisplayPrice(product).price)}
+                          </Text>
+                        </Group>
+                      ) : (
+                        formatCurrency(product.price)
+                      )}
+                    </Table.Td>
                     <Table.Td>{product.unit}</Table.Td>
                     <Table.Td ta="right">
                       {/* Sin stock lo marcamos en rojo para que salte a la vista */}
@@ -333,6 +393,55 @@ function AdminProductsPage() {
           value={form.unit}
           onChange={(value) => setForm({ ...form, unit: value })}
         />
+
+        {/* Oferta: el switch prende el descuento y recién ahí aparece el campo
+            del porcentaje. Al apagarlo dejamos el porcentaje en 0 para que el
+            formulario no guarde un descuento escondido. */}
+        <Switch
+          label="Producto en oferta"
+          description="Aparece en la sección de ofertas de la pantalla de inicio"
+          mt="lg"
+          checked={form.onOffer}
+          onChange={(event) => {
+            const onOffer = event.currentTarget.checked;
+
+            setForm({
+              ...form,
+              onOffer,
+              discountPercent: onOffer ? form.discountPercent : 0,
+            });
+          }}
+        />
+
+        {form.onOffer && (
+          <NumberInput
+            label="Descuento"
+            suffix="%"
+            description={
+              'Entre ' + MIN_DISCOUNT_PERCENT + '% y ' + MAX_DISCOUNT_PERCENT + '%'
+            }
+            min={MIN_DISCOUNT_PERCENT}
+            max={MAX_DISCOUNT_PERCENT}
+            mt="md"
+            value={form.discountPercent}
+            error={formErrors.discountPercent}
+            onChange={(value) =>
+              setForm({ ...form, discountPercent: Number(value) || 0 })
+            }
+          />
+        )}
+
+        {/* Adelanto de lo que va a ver el cliente, para no tener que hacer la
+            cuenta de cabeza antes de guardar.
+            isOnOffer del helper es el que manda: con el descuento en 0 (o con
+            el precio sin cargar) no hay nada que adelantar y la línea diría
+            "se va a cobrar $9.500 en vez de $9.500". */}
+        {getDisplayPrice(form).isOnOffer && (
+          <Text size="sm" c="dimmed" mt="xs">
+            Se va a cobrar {formatCurrency(getDisplayPrice(form).price)} en vez de{' '}
+            {formatCurrency(form.price)}.
+          </Text>
+        )}
 
         <Group justify="flex-end" mt="lg">
           <Button variant="subtle" color="gray" onClick={formHandlers.close}>

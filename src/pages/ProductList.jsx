@@ -26,6 +26,7 @@ import {
 import { EmptyState, ScreenError, ScreenLoader } from '../components/ScreenStates';
 import { useOrder } from '../context/OrderContext';
 import { formatCurrency } from '../format';
+import { getDisplayPrice } from '../pricing';
 import { useAsync } from '../useAsync';
 
 function ProductList() {
@@ -202,6 +203,12 @@ function ProductList() {
             // stock undefined = el backend no controla stock, no bloqueamos nada.
             const sinStock = product.stock === 0;
 
+            // Mismo helper que usa la pantalla de inicio para sus ofertas y que
+            // usa el carrito para saber cuánto cobrar: la cuenta del descuento
+            // está escrita una sola vez, en src/pricing.js.
+            const { price, originalPrice, isOnOffer, discountPercent } =
+              getDisplayPrice(product);
+
             return (
               // span cambia según el ancho: 1 columna en celular (base), 2 a
               // partir de 576px (xs), 3 en escritorio (md).
@@ -216,25 +223,51 @@ function ProductList() {
                   h="100%"
                   style={{ opacity: sinStock ? 0.55 : 1 }}
                 >
-                  {/* Badge de categoría arriba del nombre: se ve de un vistazo
-                      qué tipo de corte es. El color sale de getCategoryColor. */}
-                  <Badge
-                    color={getCategoryColor(product.category)}
-                    variant="light"
-                    size="sm"
-                    mb="xs"
-                    w="fit-content"
-                  >
-                    {product.category ?? DEFAULT_CATEGORY}
-                  </Badge>
+                  {/* Badges arriba del nombre: se ve de un vistazo qué tipo de
+                      corte es y si está en oferta. El rojo lleno del descuento
+                      es el mismo que usa la sección de ofertas de la home. */}
+                  <Group gap="xs" mb="xs" wrap="nowrap">
+                    {isOnOffer && (
+                      <Badge color="red" variant="filled" size="sm">
+                        -{discountPercent}%
+                      </Badge>
+                    )}
+
+                    <Badge
+                      color={getCategoryColor(product.category)}
+                      variant="light"
+                      size="sm"
+                    >
+                      {product.category ?? DEFAULT_CATEGORY}
+                    </Badge>
+                  </Group>
 
                   <Text fw={700} size="lg">
                     {product.name}
                   </Text>
 
-                  <Text c="dimmed" mt={4}>
-                    {formatCurrency(product.price)} / {product.unit}
-                  </Text>
+                  {/* En oferta mostramos el precio viejo tachado al lado del
+                      nuevo, igual que en la home: se entiende de un vistazo
+                      cuánto se ahorra. Sin oferta va una sola línea. */}
+                  {isOnOffer ? (
+                    <Group gap="xs" align="baseline" mt={4}>
+                      <Text c="dimmed" td="line-through" size="sm">
+                        {formatCurrency(originalPrice)}
+                      </Text>
+
+                      <Text fw={700} size="lg" c="red">
+                        {formatCurrency(price)}
+                      </Text>
+
+                      <Text c="dimmed" size="sm">
+                        / {product.unit}
+                      </Text>
+                    </Group>
+                  ) : (
+                    <Text c="dimmed" mt={4}>
+                      {formatCurrency(price)} / {product.unit}
+                    </Text>
+                  )}
 
                   {typeof product.stock === 'number' &&
                     (sinStock ? (

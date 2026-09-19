@@ -249,8 +249,8 @@ return {
 | --- | --- | --- |
 | `getProducts` | `GET /products` | — |
 | `getOffers` | `GET /products/offers` ⚠️ tentativo | — |
-| `createProduct` | `POST /products` | `{ name, price, unit, stock, category }` |
-| `updateProduct` | `PUT /products/:id` | `{ name, price, unit, stock, category }` |
+| `createProduct` | `POST /products` | `{ name, price, unit, stock, category, onOffer, discountPercent }` |
+| `updateProduct` | `PUT /products/:id` | `{ name, price, unit, stock, category, onOffer, discountPercent }` |
 | `deleteProduct` | `DELETE /products/:id` | — |
 | `decreaseStock` | `POST /products/decrease-stock` ⚠️ tentativo | `{ items: [{ productId, quantity }] }` |
 
@@ -292,21 +292,32 @@ const response = await axiosClient.get('/products');
 return Array.isArray(response.data) ? response.data : response.data.content;
 ```
 
-### Las ofertas de la pantalla de inicio
+### Las ofertas
 
-`getOffers()` alimenta la sección "Ofertas de la semana" de
-[`LandingPage.jsx`](src/pages/LandingPage.jsx). Espera productos con dos campos
-más:
+Un producto en oferta lleva dos campos más:
 
 ```json
 { "id": 1, "name": "Asado de tira", "price": 8900, "unit": "kg", "category": "Vacuno",
   "onOffer": true, "discountPercent": 15 }
 ```
 
-`discountedPrice` **no** viaja por la red: lo calcula el front en
-`withDiscountedPrice()` (`price * (1 - discountPercent / 100)`, redondeado a
-pesos enteros). Si el backend prefiere mandar el precio final ya calculado, se
-usa el suyo y se borra ese helper.
+Con esos dos campos, el front muestra el descuento en **tres** lugares: la
+sección "Ofertas de la semana" de la pantalla de inicio (`getOffers()`), la
+tarjeta del catálogo y el carrito, que guarda el precio **ya con descuento**
+como precio a cobrar.
+
+El precio final **no** viaja por la red: lo calcula `getDisplayPrice()` en
+[`src/pricing.js`](src/pricing.js) (`price * (1 - discountPercent / 100)`,
+redondeado a pesos enteros) y de ahí lo toman las tres pantallas y
+`withDiscountedPrice()`. Si el backend prefiere mandar el precio final ya
+calculado, se usa el suyo y se cambia ese archivo, nada más.
+
+> ⚠️ **Lo que hay que acordar con Persona 1.** `submitOrder()` manda solo
+> `productId` y `quantity`: el total lo calcula el backend con los precios de su
+> propia base (a propósito, para que nadie compre a $1 editando el request desde
+> DevTools). Entonces **el descuento tiene que estar aplicado también del lado
+> del backend**. Si no, el cliente ve $7.565 en el carrito y el pedido queda
+> guardado en $8.900. El front no puede arreglar eso solo.
 
 **Preguntar a Persona 1:** ¿existe `GET /products/offers`? Si catalog-service no
 tiene un endpoint aparte, la alternativa —igual de válida— es traer todo con

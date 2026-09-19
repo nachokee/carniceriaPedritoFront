@@ -238,6 +238,77 @@ describe('ProductList: agregar al pedido', () => {
   });
 });
 
+// El catálogo mostraba siempre product.price, así que una oferta se veía en la
+// pantalla de inicio y desaparecía al entrar a comprar.
+describe('ProductList: ofertas', () => {
+  // Mismo asado, con 15% de descuento: 8900 - 15% = 7565.
+  const asadoEnOferta = {
+    id: 1,
+    name: 'Asado de tira',
+    price: 8900,
+    unit: 'kg',
+    stock: 25,
+    category: 'Vacuno',
+    onOffer: true,
+    discountPercent: 15,
+  };
+
+  async function renderConOferta() {
+    getProducts.mockResolvedValue([asadoEnOferta, productosDePrueba[2]]);
+
+    const utils = renderWithProviders(
+      <>
+        <ProductList />
+        <CartProbe />
+      </>,
+    );
+
+    await screen.findByText('Asado de tira');
+
+    return utils;
+  }
+
+  it('muestra el badge con el porcentaje de descuento', async () => {
+    await renderConOferta();
+
+    const tarjeta = screen.getByText('Asado de tira').closest('.mantine-Card-root');
+
+    expect(within(tarjeta).getByText('-15%')).toBeInTheDocument();
+  });
+
+  it('muestra el precio con descuento y el de lista tachado', async () => {
+    await renderConOferta();
+
+    const tarjeta = screen.getByText('Asado de tira').closest('.mantine-Card-root');
+
+    // El de la oferta y, al lado, el viejo.
+    expect(within(tarjeta).getByText(/7\.565/)).toBeInTheDocument();
+    expect(within(tarjeta).getByText(/8\.900/)).toBeInTheDocument();
+  });
+
+  it('un producto sin oferta no muestra ningún badge de descuento', async () => {
+    await renderConOferta();
+
+    const tarjeta = screen.getByText('Pollo entero').closest('.mantine-Card-root');
+
+    expect(within(tarjeta).queryByText(/^-\d+%$/)).not.toBeInTheDocument();
+  });
+
+  // Esta es la que importa: lo que se ve tiene que ser lo que se cobra.
+  it('agrega al carrito el precio con descuento, no el de lista', async () => {
+    const user = userEvent.setup();
+    await renderConOferta();
+
+    const tarjeta = screen.getByText('Asado de tira').closest('.mantine-Card-root');
+
+    await user.click(
+      within(tarjeta).getByRole('button', { name: 'Agregar al pedido' }),
+    );
+
+    expect(screen.getByTestId('cart-total')).toHaveTextContent('7565');
+  });
+});
+
 describe('ProductList: estados de carga y error', () => {
   it('muestra el cargando mientras espera los productos', () => {
     renderWithProviders(<ProductList />);
