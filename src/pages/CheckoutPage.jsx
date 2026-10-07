@@ -13,7 +13,6 @@ import {
 import { IconAlertCircle } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { decreaseStock } from '../api/catalogApi';
 import { submitOrder } from '../api/orderApi';
 import { processPayment } from '../api/paymentApi';
 import OrderItemsList from '../components/OrderItemsList';
@@ -42,10 +41,6 @@ function CheckoutPage() {
   // Guardamos el orderId cuando el pedido se crea bien. Si después falla el
   // pago, al reintentar reusamos este id en vez de crear un pedido nuevo.
   const [orderId, setOrderId] = useState(null);
-
-  // Lo mismo con el stock: si ya lo descontamos y después falla el pago, al
-  // reintentar no hay que descontarlo de nuevo.
-  const [stockDescontado, setStockDescontado] = useState(false);
 
   // Se prende cuando la compra terminó bien, justo antes de vaciar el carrito.
   //
@@ -100,7 +95,11 @@ function CheckoutPage() {
     setProcessing(true);
 
     try {
-      // Paso 1: crear el pedido (solo la primera vez).
+      // Paso 1: crear el pedido (solo la primera vez). El back busca los precios
+      // en el catálogo y descuenta el stock en la misma operación: si algún
+      // producto se quedó sin stock mientras la persona completaba el
+      // checkout, submitOrder lanza un error y cortamos acá. No se cobra nada
+      // y el carrito queda intacto para que pueda ajustar el pedido.
       let currentOrderId = orderId;
 
       if (!currentOrderId) {
@@ -109,22 +108,7 @@ function CheckoutPage() {
         setOrderId(currentOrderId);
       }
 
-      // Paso 2: descontar el stock ANTES de cobrar. Si algún producto se quedó
-      // sin stock mientras la persona completaba el checkout, decreaseStock
-      // lanza un error y cortamos acá: no se cobra nada y el carrito queda
-      // intacto para que pueda ajustar el pedido.
-      if (!stockDescontado) {
-        await decreaseStock(
-          items.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-          })),
-        );
-
-        setStockDescontado(true);
-      }
-
-      // Paso 3: cobrar. En producción los datos de la tarjeta irían directo a
+      // Paso 2: cobrar. En producción los datos de la tarjeta irían directo a
       // la pasarela de pago, nunca a nuestro backend.
       const paymentInfo =
         method === 'tarjeta' ? { method, cardNumber, expiry, cvv } : { method };
@@ -139,7 +123,7 @@ function CheckoutPage() {
         return;
       }
 
-      // Paso 4: salió todo bien. Le pasamos los datos a la pantalla de
+      // Paso 3: salió todo bien. Le pasamos los datos a la pantalla de
       // confirmación por el "state" de navigate, porque el carrito se vacía acá.
       //
       // El orden importa: primero avisamos que la compra terminó (si no, vaciar
